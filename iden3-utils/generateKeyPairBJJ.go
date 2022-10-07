@@ -3,18 +3,14 @@ package main
 import (
 	"fmt"
 	"github.com/iden3/go-iden3-crypto/babyjub"
-	"math/big"
+	"github.com/iden3/go-iden3-crypto/utils"
 )
-
-func toHexInt(n *big.Int) string {
-	return fmt.Sprintf("%x", n)
-}
 
 func main() {
 	// generate babyJubjub private key randomly
 	babyJubjubPrivKey := babyjub.NewRandPrivKey()
-	babyJubjubPrivKeyScaler := babyjub.SkToBigInt(&babyJubjubPrivKey)
-	fmt.Println("Private Key: ", toHexInt(babyJubjubPrivKeyScaler))
+	babyJubjubPrivKeyString := utils.HexEncode(babyJubjubPrivKey[:])
+	fmt.Println("Private Key: ", babyJubjubPrivKeyString)
 
 	// generate public key from private key
 	babyJubjubPubKey := babyJubjubPrivKey.Public()
