@@ -3,14 +3,15 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"github.com/iden3/go-iden3-crypto/babyjub"
+
 	"io/ioutil"
 	"log"
 	"math/rand"
 
 	core "github.com/iden3/go-iden3-core"
-	"github.com/iden3/go-merkletree-sql"
-	"github.com/iden3/go-merkletree-sql/db/memory"
+	"github.com/iden3/go-iden3-crypto/babyjub"
+	"github.com/iden3/go-merkletree-sql/v2"
+	"github.com/iden3/go-merkletree-sql/v2/db/memory"
 )
 
 type Account struct {
@@ -23,6 +24,7 @@ type Account struct {
 	RotRoot    *merkletree.Hash   `json:"rot"`
 	AuthClaim  *core.Claim        `json:"authClaim"`
 	Claims     []*core.Claim      `json:"claims"`
+	Identity   *Identity          `json:"identity"`
 }
 
 func NewAccount() *Account {
@@ -61,17 +63,34 @@ func NewAccount() *Account {
 	account.RetRoot = ret.Root()
 	account.RotRoot = rot.Root()
 	account.AuthClaim = authClaim
+	identity := NewIdentity(babyJubjubPrivKey, id, clt, ret, rot, authClaim)
+	account.Identity = identity
 	return account
 }
 
-func (account *Account) LoadAccount(file string) {
+func LoadAccountFromFile(file string) *Account {
+	account := new(Account)
 	content, err := ioutil.ReadFile(file)
 	if err != nil {
 		log.Fatal("Error when opening file: ", err)
 	}
 
-	err = json.Unmarshal(content, &account)
+	err = json.Unmarshal(content, account)
 	if err != nil {
 		log.Fatal("Error during Unmarshal(): ", err)
 	}
+	identity := FromFileData(account)
+	account.Identity = identity
+	return account
+}
+
+func (account *Account) addClaim(claim ClaimAPI) []byte {
+	inputJSON, newClaim := account.Identity.addClaim(claim)
+
+	account.IDS = account.Identity.GetIDS()
+	account.CltRoot = account.Identity.Clt.Root()
+	account.RetRoot = account.Identity.Ret.Root()
+	account.RotRoot = account.Identity.Rot.Root()
+	account.Claims = append(account.Claims, newClaim)
+	return inputJSON
 }
