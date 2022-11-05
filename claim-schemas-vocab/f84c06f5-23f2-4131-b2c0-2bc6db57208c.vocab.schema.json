@@ -1,0 +1,14 @@
+{
+    "$id": "https://s3.eu-west-1.amazonaws.com/polygonid-schemas/f84c06f5-23f2-4131-b2c0-2bc6db57208c.vocab.schema.json",
+    "$schema": "https://s3.eu-west-1.amazonaws.com/polygonid-schemas/f84c06f5-23f2-4131-b2c0-2bc6db57208c.json-ld",
+    "title": "Vocabulary for Iden3 Credential specific type in a json Format",
+    "type": "JHURole",
+    "properties": {   
+        "Student": {
+            "display": "Student",
+            "description": "This attribute indicates if person is ever enrolled in JHU as student",
+            "type": "number",
+            "format": "bool"
+        }
+    }
+}

@@ -1,0 +1,23 @@
+{
+    "@context": [{
+        "@version": 1.1,
+        "@protected": true,
+        "id": "@id",
+        "type": "@type",
+        "JHURole": {
+            "@id": "https://s3.eu-west-1.amazonaws.com/polygonid-schemas/f84c06f5-23f2-4131-b2c0-2bc6db57208c.json-ld#JHURole",
+            "@context" : {
+                "@version": 1.1,
+                "@protected": true,
+                "id": "@id",
+                "type": "@type",
+                "poly-vocab": "https://s3.eu-west-1.amazonaws.com/polygonid-schemas/f84c06f5-23f2-4131-b2c0-2bc6db57208c.vocab.schema.json",
+                "serialization": "https://github.com/iden3/claim-schema-vocab/blob/main/credentials/serialization.md#",
+                "Student": {
+                    "@id": "poly-vocab:Student",
+                    "@type": "serialization:IndexDataSlotA"
+                }
+            }
+        }
+    }]
+}

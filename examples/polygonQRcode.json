@@ -1,0 +1,12 @@
+{
+    "body":{
+       "callbackUrl":"https://api-staging.polygonid.com/v1/offers-qrcode/e07d4303-c539-403e-8803-bab7e7d4b9da/callback?sessionID=0a4737d0-bdec-45bd-a3ef-3fe76d6f9fed",
+       "reason":"auth login",
+       "scope":[]
+    },
+    "from":"11B98LqVGQ5u7S2zPjGXW1EsxfcfFDj4ehS3LQYWLD",
+    "id":"bed33cd1-93da-4e92-a168-c97ac44e7150",
+    "thid":"bed33cd1-93da-4e92-a168-c97ac44e7150",
+    "typ":"application/iden3comm-plain-json",
+    "type":"https://iden3-communication.io/authorization/1.0/request"
+}
