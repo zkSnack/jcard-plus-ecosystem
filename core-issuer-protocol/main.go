@@ -6,7 +6,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type IssueClaimsBody struct {
+	AuthToken string `json:"authToken"`
+	HolderID  string `json:"holderID"`
+}
+
 func main() {
+	LoadStudentInfo()
 	router := gin.Default()
 
 	router.POST("/api/v1/issueClaim", issueClaim)
@@ -15,7 +21,10 @@ func main() {
 }
 
 func issueClaim(c *gin.Context) {
-	// receive token, holderID
-	claims := IssueClaims("holderID_abc")
+
+	var jsonBody IssueClaimsBody
+	c.BindJSON(&jsonBody)
+
+	claims := IssueClaims(jsonBody.AuthToken, jsonBody.HolderID)
 	c.IndentedJSON(http.StatusOK, claims)
 }

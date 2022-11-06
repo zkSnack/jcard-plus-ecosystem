@@ -94,19 +94,25 @@ func generateIssuerIdentity(ctx context.Context, privateKey babyjub.PrivateKey, 
 }
 
 // TO-DO: Use logic from Iden3-SDK instead of this
-func generateAgeClaim(issuerIdentity *Identity, holderID string) *circuits.Claim {
+func generateAgeClaim(issuerIdentity *Identity, holderID string, authToken string) *circuits.Claim {
+
+	studentInfo := getStudentInfoByToken(authToken)
+
+	fmt.Println("Student Info:", studentInfo.JHED_ID)
+
 	ctx := context.Background()
 	claimSchemaHashHex := generateHashFromClaimSchemaFile("student-age.json-ld", "AgeCredential")
 	claimSchemaHash, _ := core.NewSchemaHashFromHex(claimSchemaHashHex)
 
 	// Why is this needed? Is it any use on the wallet or verifier side?
-	subjectId, _ := core.IDFromString("113TCVw5KMeMp99Qdvub9Mssfz7krL9jWNvbdB7Fd2")
+	subjectId, _ := core.IDFromString(holderID)
 
 	// Add revocation nonce. Used to invalidate the claim. Update it to random number once finish testing.
 	revNonce := uint64(7)
 	// revNonce := rand.Uint64()
 
-	birthday := big.NewInt(19960424)
+	birthday := new(big.Int)
+	birthday.SetString(studentInfo.BirthDate, 10)
 
 	ageClaim, _ := core.NewClaim(claimSchemaHash,
 		core.WithIndexDataInts(birthday, big.NewInt(0)),
@@ -172,8 +178,7 @@ func generateAgeClaim(issuerIdentity *Identity, holderID string) *circuits.Claim
 	return &holderAgeClaim
 }
 
-func IssueClaims(holderID string) []circuits.Claim {
-
+func IssueClaims(authToken string, holderID string) []circuits.Claim {
 	babyJubjubPrivKeyString := "0x8a2e1766a7f4851b6d27d313b7c4b7b271772763eb33466c50671f3e8597c658"
 	babyJubjubPrivKeyInByte, _ := utils.HexDecode(babyJubjubPrivKeyString)
 	var babyJubjubPrivKey babyjub.PrivateKey
@@ -197,7 +202,7 @@ func IssueClaims(holderID string) []circuits.Claim {
 	issuerIdentity := generateIssuerIdentity(ctx, babyJubjubPrivKey, authClaim)
 
 	var claims []circuits.Claim
-	claims = append(claims, *generateAgeClaim(issuerIdentity, "113TCVw5KMeMp99Qdvub9Mssfz7krL9jWNvbdB7Fd2"))
+	claims = append(claims, *generateAgeClaim(issuerIdentity, holderID, authToken))
 
 	return claims
 }
