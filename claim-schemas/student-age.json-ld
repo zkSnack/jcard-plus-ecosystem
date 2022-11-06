@@ -11,7 +11,7 @@
         "@protected": true,
         "id": "@id",
         "type": "@type",
-        "jcard-plus-vocab": "https://github.com/saganshul/capstone/claim-schema-vocab/student-age.md#",
+        "jcard-plus-vocab": "https://github.com/saganshul/capstone/claim-schema-vocab/student-age.json",
         "serialization": "https://github.com/iden3/claim-schema-vocab/blob/main/credentials/serialization.md#",
         "type": {
           "@id": "vocab:birthDay",

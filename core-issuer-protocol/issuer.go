@@ -98,13 +98,10 @@ func generateAgeClaim(issuerIdentity *Identity, holderID string, authToken strin
 
 	studentInfo := getStudentInfoByToken(authToken)
 
-	fmt.Println("Student Info:", studentInfo.JHED_ID)
-
 	ctx := context.Background()
 	claimSchemaHashHex := generateHashFromClaimSchemaFile("student-age.json-ld", "AgeCredential")
 	claimSchemaHash, _ := core.NewSchemaHashFromHex(claimSchemaHashHex)
 
-	// Why is this needed? Is it any use on the wallet or verifier side?
 	subjectId, _ := core.IDFromString(holderID)
 
 	// Add revocation nonce. Used to invalidate the claim. Update it to random number once finish testing.
