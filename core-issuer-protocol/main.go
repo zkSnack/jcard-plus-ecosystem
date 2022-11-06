@@ -7,8 +7,8 @@ import (
 )
 
 type IssueClaimsBody struct {
-	AuthToken string `json:"authToken"`
-	HolderID  string `json:"holderID"`
+	Token string `json:"token"`
+	ID    string `json:"id"`
 }
 
 func main() {
@@ -25,6 +25,6 @@ func issueClaim(c *gin.Context) {
 	var jsonBody IssueClaimsBody
 	c.BindJSON(&jsonBody)
 
-	claims := IssueClaims(jsonBody.AuthToken, jsonBody.HolderID)
+	claims := IssueClaims(jsonBody.Token, jsonBody.ID)
 	c.IndentedJSON(http.StatusOK, claims)
 }

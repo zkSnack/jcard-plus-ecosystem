@@ -94,9 +94,9 @@ func generateIssuerIdentity(ctx context.Context, privateKey babyjub.PrivateKey, 
 }
 
 // TO-DO: Use logic from Iden3-SDK instead of this
-func generateAgeClaim(issuerIdentity *Identity, holderID string, authToken string) *circuits.Claim {
+func generateAgeClaim(issuerIdentity *Identity, holderID string, token string) *circuits.Claim {
 
-	studentInfo := getStudentInfoByToken(authToken)
+	studentInfo := getStudentInfoByToken(token)
 
 	ctx := context.Background()
 	claimSchemaHashHex := generateHashFromClaimSchemaFile("student-age.json-ld", "AgeCredential")
@@ -175,7 +175,7 @@ func generateAgeClaim(issuerIdentity *Identity, holderID string, authToken strin
 	return &holderAgeClaim
 }
 
-func IssueClaims(authToken string, holderID string) []circuits.Claim {
+func IssueClaims(token string, holderID string) []circuits.Claim {
 	babyJubjubPrivKeyString := "0x8a2e1766a7f4851b6d27d313b7c4b7b271772763eb33466c50671f3e8597c658"
 	babyJubjubPrivKeyInByte, _ := utils.HexDecode(babyJubjubPrivKeyString)
 	var babyJubjubPrivKey babyjub.PrivateKey
@@ -199,7 +199,7 @@ func IssueClaims(authToken string, holderID string) []circuits.Claim {
 	issuerIdentity := generateIssuerIdentity(ctx, babyJubjubPrivKey, authClaim)
 
 	var claims []circuits.Claim
-	claims = append(claims, *generateAgeClaim(issuerIdentity, holderID, authToken))
+	claims = append(claims, *generateAgeClaim(issuerIdentity, holderID, token))
 
 	return claims
 }
