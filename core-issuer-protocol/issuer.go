@@ -2,31 +2,16 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/big"
 
 	circuits "github.com/iden3/go-circuits"
 	core "github.com/iden3/go-iden3-core"
 	"github.com/iden3/go-iden3-crypto/babyjub"
-	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/iden3/go-iden3-crypto/utils"
-	merkletree "github.com/iden3/go-merkletree-sql"
-	"github.com/iden3/go-merkletree-sql/db/memory"
+	merkletree "github.com/iden3/go-merkletree-sql/v2"
+	"github.com/iden3/go-merkletree-sql/v2/db/memory"
 )
-
-type Account struct {
-	ID         *core.ID           `json:"id"`
-	IDS        *merkletree.Hash   `json:"identity_state"`
-	PrivateKey babyjub.PrivateKey `json:"private_key"`
-	PublicKey  *babyjub.PublicKey `json:"public_key"`
-	CltRoot    *merkletree.Hash   `json:"clt"`
-	RetRoot    *merkletree.Hash   `json:"ret"`
-	RotRoot    *merkletree.Hash   `json:"rot"`
-	AuthClaim  *core.Claim        `json:"authClaim"`
-	Claims     []*core.Claim      `json:"claims"`
-	Identity   *Identity          `json:"identity"`
-}
 
 type Identity struct {
 	PrivateKey      babyjub.PrivateKey     `json:"private_key"`
@@ -38,28 +23,7 @@ type Identity struct {
 	AuthState       *circuits.TreeState    `json:"authState"`
 	AuthMTPProof    *merkletree.Proof      `json:"authMTPProof"`
 	AuthNonRevProof *merkletree.Proof      `json:"authNonRevProof"`
-}
-
-type Issuer struct {
-	ID                  *core.ID               `json:"id"`
-	IDS                 *merkletree.Hash       `json:"identity_state"`
-	PublicKey           *babyjub.PublicKey     `json:"public_key"`
-	Claims              []*core.Claim          `json:"claims"`
-	Identity            *Identity              `json:"identity"`
-	IdToOfferedClaimMap map[string]*core.Claim `json:"id_to_claim_map"`
-}
-
-type OfferClaim struct {
-	ID          string   `json:"id"`
-	CallBackURL string   `json:"callback_url"`
-	IssuerID    *core.ID `json:"issuer_id"`
-}
-
-type Claim struct {
-	ID     string  `json:"id"`
-	Title  string  `json:"title"`
-	Artist string  `json:"artist"`
-	Price  float64 `json:"price"`
+	IDS             *merkletree.Hash       `json:"identity_state"`
 }
 
 func generateAuthClaim(babyJubjubPubKey *babyjub.PublicKey) *core.Claim {
@@ -74,8 +38,6 @@ func generateAuthClaim(babyJubjubPubKey *babyjub.PublicKey) *core.Claim {
 		core.WithIndexDataInts(babyJubjubPubKey.X, babyJubjubPubKey.Y),
 		core.WithRevocationNonce(revNonce))
 
-	authClaimToMarshal, _ := json.Marshal(authClaim)
-	fmt.Println("Auth Claim:", string(authClaimToMarshal))
 	return authClaim
 }
 
@@ -123,13 +85,11 @@ func generateIssuerIdentity(ctx context.Context, privateKey babyjub.PrivateKey, 
 		AuthState:       &authTreeState,
 		AuthMTPProof:    authMtpProof,
 		AuthNonRevProof: authNonRevProof,
+		IDS:             idenState,
 	}
 
 	// Print Roots of Merkle Trees
 	fmt.Println("Genesis ID:", issuerIdentity.ID)
-	fmt.Println("Claim Merkle Tree Root:", issuerIdentity.Clt.Root().BigInt())
-	fmt.Println("Revocation Merkle Tree Root:", issuerIdentity.Ret.Root().BigInt())
-	fmt.Println("Roots Merkle Tree Root:", issuerIdentity.Rot.Root().BigInt())
 	return issuerIdentity
 }
 
@@ -173,6 +133,8 @@ func generateAgeClaim(issuerIdentity *Identity, holderID string) *circuits.Claim
 		issuerIdentity.Ret.Root().BigInt(),
 		issuerIdentity.Rot.Root().BigInt())
 
+	issuerIdentity.IDS = idsAfterClaimAdd
+
 	issuerStateAfterClaimAdd := circuits.TreeState{
 		State:          idsAfterClaimAdd,
 		ClaimsRoot:     issuerIdentity.Clt.Root(),
@@ -204,78 +166,38 @@ func generateAgeClaim(issuerIdentity *Identity, holderID string) *circuits.Claim
 		SignatureProof: claimIssuerSignature,
 	}
 
-	claimToMarshal, _ := json.Marshal(holderAgeClaim)
-	fmt.Println("Age Claim:", string(claimToMarshal))
+	// fmt.Println("Age Claim:")
+	// claimMarshelText, _ := json.MarshalIndent(holderAgeClaim, "", "\t")
+	// fmt.Println(string(claimMarshelText))
 	return &holderAgeClaim
 }
 
-func (identity *Identity) offerClaimById(id string) *OfferClaim {
-	return &OfferClaim{
-		ID:          id,
-		CallBackURL: "http://localhost:8080/claim/offer/" + id + "/callback",
-		IssuerID:    identity.ID,
-	}
-}
+func IssueClaims(holderID string) []circuits.Claim {
 
-func (identity *Identity) revokeClaim(claim *core.Claim) {
-	// TO-D0: Add logic to revoke a claim
-}
+	babyJubjubPrivKeyString := "0x8a2e1766a7f4851b6d27d313b7c4b7b271772763eb33466c50671f3e8597c658"
+	babyJubjubPrivKeyInByte, _ := utils.HexDecode(babyJubjubPrivKeyString)
+	var babyJubjubPrivKey babyjub.PrivateKey
+	copy(babyJubjubPrivKey[:], babyJubjubPrivKeyInByte)
+	// babyJubjubPrivKey := babyjub.NewRandPrivKey()
+	fmt.Println("Private Key: ", babyJubjubPrivKey)
 
-func (identity *Identity) issueClaim(id string) {
-	// TO-D0: Add logic to update a claim
-}
+	// generate public key from private key
+	babyJubjubPubKey := babyJubjubPrivKey.Public()
 
-func (identity *Identity) IssueClaimBySignature(claim *core.Claim) {
-	// TO-D0: Add logic to issue a claim
-	claimIndex, claimValue := claim.RawSlots()
-	indexHash, _ := poseidon.Hash(core.ElemBytesToInts(claimIndex[:]))
-	valueHash, _ := poseidon.Hash(core.ElemBytesToInts(claimValue[:]))
+	// print public key
+	fmt.Println("BabyJubJub Public Key:", babyJubjubPubKey)
 
-	// Poseidon Hash the indexHash and the valueHash together to get the claimHash
-	claimHash, _ := merkletree.HashElems(indexHash, valueHash)
+	// 2. Create an Identity
 
-	// Sign the claimHash with the private key of the issuer
-	claimSignature := identity.PrivateKey.SignPoseidon(claimHash.BigInt())
+	// 2.1 Create an Auth Claim
+	authClaim := generateAuthClaim(babyJubjubPubKey)
 
-	fmt.Println("Claim Signature:", claimSignature)
-}
+	// 2.2 Generate an identity
+	ctx := context.Background()
+	issuerIdentity := generateIssuerIdentity(ctx, babyJubjubPrivKey, authClaim)
 
-func IssueClaim(holderID string) []Claim {
-	var claims = []Claim{
-		{ID: "1", Title: "Blue Train", Artist: "John Coltrane", Price: 56.99},
-		{ID: "2", Title: "Jeru", Artist: "Gerry Mulligan", Price: 17.99},
-		{ID: "3", Title: "Sarah Vaughan and Clifford Brown", Artist: "Sarah Vaughan", Price: 39.99},
-	}
+	var claims []circuits.Claim
+	claims = append(claims, *generateAgeClaim(issuerIdentity, "113TCVw5KMeMp99Qdvub9Mssfz7krL9jWNvbdB7Fd2"))
+
 	return claims
 }
-
-// func main() {
-
-// 	// 1. BabyJubJub key - Generate a new key pair randomly
-
-// 	// TODO: update it to random number once finish testing.
-// 	babyJubjubPrivKeyString := "0x8a2e1766a7f4851b6d27d313b7c4b7b271772763eb33466c50671f3e8597c658"
-// 	babyJubjubPrivKeyInByte, _ := utils.HexDecode(babyJubjubPrivKeyString)
-// 	var babyJubjubPrivKey babyjub.PrivateKey
-// 	copy(babyJubjubPrivKey[:], babyJubjubPrivKeyInByte)
-// 	// babyJubjubPrivKey := babyjub.NewRandPrivKey()
-// 	fmt.Println("Private Key: ", babyJubjubPrivKey)
-
-// 	// generate public key from private key
-// 	babyJubjubPubKey := babyJubjubPrivKey.Public()
-
-// 	// print public key
-// 	fmt.Println("BabyJubJub Public Key:", babyJubjubPubKey)
-
-// 	// 2. Create an Identity
-
-// 	// 2.1 Create an Auth Claim
-// 	authClaim := generateAuthClaim(babyJubjubPubKey)
-
-// 	// 2.2 Generate an identity
-// 	ctx := context.Background()
-// 	issuerIdentity := generateIssuerIdentity(ctx, babyJubjubPrivKey, authClaim)
-
-	generateAgeClaim(issuerIdentity, "113TCVw5KMeMp99Qdvub9Mssfz7krL9jWNvbdB7Fd2")
-
-// }

@@ -15,6 +15,7 @@ func main() {
 }
 
 func issueClaim(c *gin.Context) {
-	claims := IssueClaim("holderID_abc")
+	// receive token, holderID
+	claims := IssueClaims("holderID_abc")
 	c.IndentedJSON(http.StatusOK, claims)
 }

@@ -26,17 +26,3 @@ func generateHashFromClaimSchemaFile(schemaFileName string, credentialType strin
 
 	return string(sHashHex)
 }
-
-func hashSchemaTestFunc() {
-	schemaBytes, _ := os.ReadFile("../claim-schemas/proof-of-dao-membership.json-ld")
-	fmt.Println(schemaBytes)
-
-	var sHash core.SchemaHash
-	h := keccak256.Hash(schemaBytes, []byte("ProofOfDaoMembership"))
-
-	copy(sHash[:], h[len(h)-16:])
-
-	sHashHex, _ := sHash.MarshalText()
-
-	fmt.Println(string(sHashHex))
-}
