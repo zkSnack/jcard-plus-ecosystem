@@ -2,14 +2,18 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/iden3/go-circuits"
 	core "github.com/iden3/go-iden3-core"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/iden3/go-merkletree-sql/v2"
 	"github.com/iden3/go-merkletree-sql/v2/db/memory"
+	"github.com/iden3/iden3comm/protocol"
+	"github.com/pkg/errors"
 	"log"
 	"math/big"
+	"time"
 )
 
 type Identity struct {
@@ -19,6 +23,7 @@ type Identity struct {
 	Ret        *merkletree.MerkleTree
 	Rot        *merkletree.MerkleTree
 	AuthClaim  *core.Claim
+	Claims     map[*big.Int]circuits.Claim
 }
 
 func NewIdentity(privateKey babyjub.PrivateKey, ID *core.ID, clt *merkletree.MerkleTree, ret *merkletree.MerkleTree, rot *merkletree.MerkleTree, authClaim *core.Claim) *Identity {
@@ -115,10 +120,48 @@ func (identity *Identity) addClaim(claim ClaimAPI) ([]byte, *core.Claim) {
 		},
 		Signature: signature,
 	}
+	fmt.Println(stateTransitionInputs)
 
 	// Perform marshalling of the state transition inputs
 	inputBytes, _ := stateTransitionInputs.InputsMarshal()
 	return inputBytes, claimToAdd
+}
+
+func (identity *Identity) addClaimFromIssuer(claim circuits.Claim) {
+	// TODO: Better key for looking up Claims
+	identity.Claims[claim.Claim.GetSchemaHash().BigInt()] = claim
+}
+
+func (identity *Identity) GenerateProof(challenge *big.Int, query circuits.Query, schema protocol.Schema) ([]byte, error) {
+	schemaHash, _ := core.NewSchemaHashFromHex(GetHashFromClaimSchemaURL(schema.URL, schema.Type))
+	// TODO: Get Dynamic circuit name from proof request
+	if val, ok := identity.Claims[schemaHash.BigInt()]; ok {
+		atomicInputs := circuits.AtomicQuerySigInputs{
+			ID:               identity.ID,
+			AuthClaim:        identity.GetUserAuthClaim(),
+			Challenge:        challenge,
+			Signature:        identity.PrivateKey.SignPoseidon(challenge),
+			CurrentTimeStamp: time.Now().Unix(),
+			Claim:            val,
+			Query:            query,
+		}
+		inputBytes, err := atomicInputs.InputsMarshal()
+		if err != nil {
+			fmt.Println("Error during Generate Proof: ", err)
+		}
+		return inputBytes, nil
+	} else {
+		return nil, errors.New("failed to serialize public signals into json")
+	}
+}
+
+func (identity *Identity) GetTreeState() circuits.TreeState {
+	return circuits.TreeState{
+		State:          identity.GetIDS(),
+		ClaimsRoot:     identity.Clt.Root(),
+		RevocationRoot: identity.Ret.Root(),
+		RootOfRoots:    identity.Rot.Root(),
+	}
 }
 
 func (identity *Identity) GetIDS() *merkletree.Hash {
@@ -127,6 +170,30 @@ func (identity *Identity) GetIDS() *merkletree.Hash {
 		identity.Ret.Root().BigInt(),
 		identity.Rot.Root().BigInt())
 	return state
+}
+
+func (identity *Identity) GetUserAuthClaim() circuits.Claim {
+	ctx := context.Background()
+
+	authClaim := identity.AuthClaim
+	authClaimIndex, _ := authClaim.HIndex()
+	authClaimRevNonce := authClaim.GetRevocationNonce()
+
+	authMTPProof, _, _ := identity.Clt.GenerateProof(ctx, authClaimIndex, identity.Clt.Root())
+
+	authNonRevMTPProof, _, _ := identity.Ret.GenerateProof(ctx, big.NewInt(int64(authClaimRevNonce)), identity.Ret.Root())
+
+	inputsAuthClaim := circuits.Claim{
+		//Schema:    authClaim.Schema,
+		Claim:     identity.AuthClaim,
+		Proof:     authMTPProof,
+		TreeState: identity.GetTreeState(),
+		NonRevProof: &circuits.ClaimNonRevStatus{
+			TreeState: identity.GetTreeState(),
+			Proof:     authNonRevMTPProof,
+		},
+	}
+	return inputsAuthClaim
 }
 
 // IsAtGenesisState TODO: Implement this function

@@ -1,16 +1,29 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/iden3/go-circuits"
+	"github.com/iden3/go-iden3-auth/loaders"
+	"github.com/iden3/go-iden3-auth/pubsignals"
+	"github.com/iden3/go-schema-processor/processor"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"os"
 	"os/exec"
 	"path"
 	"strings"
 
+	jsonSuite "github.com/iden3/go-schema-processor/json"
+	jsonldSuite "github.com/iden3/go-schema-processor/json-ld"
 	"github.com/pkg/errors"
+)
+
+const (
+	jsonldExt string = "json-ld"
+	jsonExt   string = "json"
 )
 
 // ZKInputs are inputs for proof generation
@@ -223,4 +236,129 @@ func VerifyZkProof(circuitPath string, zkp *FullProof) error {
 	}
 
 	return nil
+}
+
+func ValidateAndGetCircuitsQuery(q pubsignals.Query, ctx context.Context, loader loaders.SchemaLoader) (*circuits.Query, error) {
+
+	schemaBytes, ext, err := loader.Load(ctx, q.Schema)
+	if err != nil {
+		return nil, errors.Wrap(err, "can't load schema for request query")
+	}
+
+	pr, err := prepareProcessor(q.Schema.Type, ext)
+	if err != nil {
+		return nil, errors.Wrap(err, "can't prepare processor for request query")
+	}
+	queryReq, err := parseRequest(q.Req, schemaBytes, pr)
+	if err != nil {
+		return nil, errors.Wrap(err, "can't parse request query")
+	}
+
+	return queryReq, nil
+}
+
+func prepareProcessor(claimType, ext string) (*processor.Processor, error) {
+	pr := &processor.Processor{}
+	var parser processor.Parser
+	switch ext {
+	case jsonExt:
+		parser = jsonSuite.Parser{ParsingStrategy: processor.OneFieldPerSlotStrategy}
+	case jsonldExt:
+		parser = jsonldSuite.Parser{ClaimType: claimType, ParsingStrategy: processor.OneFieldPerSlotStrategy}
+	default:
+		return nil, errors.Errorf(
+			"process suite for schema format %s is not supported", ext)
+	}
+	return processor.InitProcessorOptions(pr, processor.WithParser(parser)), nil
+}
+
+func parseRequest(req map[string]interface{}, schema []byte, pr *processor.Processor) (*circuits.Query, error) {
+
+	if req == nil {
+		return &circuits.Query{
+			SlotIndex: 0,
+			Values:    nil,
+			Operator:  circuits.NOOP,
+		}, nil
+	}
+
+	fieldName, fieldPredicate, err := extractQueryFields(req)
+	if err != nil {
+		return nil, err
+	}
+
+	values, operator, err := parseFieldPredicate(fieldPredicate, err)
+	if err != nil {
+		return nil, err
+	}
+
+	slotIndex, err := pr.GetFieldSlotIndex(fieldName, schema)
+	if err != nil {
+		return nil, err
+	}
+
+	return &circuits.Query{SlotIndex: slotIndex, Values: values, Operator: operator}, nil
+
+}
+
+func parseFieldPredicate(fieldPredicate map[string]interface{}, err error) ([]*big.Int, int, error) {
+	var values []*big.Int
+	var operator int
+	for op, v := range fieldPredicate {
+
+		var ok bool
+		operator, ok = circuits.QueryOperators[op]
+		if !ok {
+			return nil, 0, errors.New("query operator is not supported")
+		}
+
+		values, err = getValuesAsArray(v)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		// only one predicate for field is supported
+		break
+	}
+	return values, operator, err
+}
+
+func extractQueryFields(req map[string]interface{}) (fieldName string, fieldPredicate map[string]interface{}, err error) {
+
+	if len(req) > 1 {
+		return "", nil, errors.New("multiple requests not supported")
+	}
+
+	for field, body := range req {
+		fieldName = field
+		var ok bool
+		fieldPredicate, ok = body.(map[string]interface{})
+		if !ok {
+			return "", nil, errors.New("failed cast type map[string]interface")
+		}
+		if len(fieldPredicate) > 1 {
+			return "", nil, errors.New("multiple predicates for one field not supported")
+		}
+		break
+	}
+	return fieldName, fieldPredicate, nil
+}
+
+func getValuesAsArray(v interface{}) ([]*big.Int, error) {
+	var values []*big.Int
+
+	switch value := v.(type) {
+	case float64:
+		values = make([]*big.Int, 1)
+		values[0] = new(big.Int).SetInt64(int64(value))
+	case []interface{}:
+		values = make([]*big.Int, len(value))
+		for i, item := range value {
+			values[i] = new(big.Int).SetInt64(int64(item.(float64)))
+		}
+	default:
+		return nil, errors.Errorf("unsupported values type %T", v)
+	}
+
+	return values, nil
 }

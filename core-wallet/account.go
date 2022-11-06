@@ -3,15 +3,19 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"github.com/iden3/go-iden3-auth/loaders"
+	"github.com/iden3/iden3comm/protocol"
+	"github.com/pkg/errors"
+	"math/big"
 
-	"io/ioutil"
-	"log"
-	"math/rand"
-
+	"github.com/iden3/go-iden3-auth/pubsignals"
 	core "github.com/iden3/go-iden3-core"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-merkletree-sql/v2"
 	"github.com/iden3/go-merkletree-sql/v2/db/memory"
+	"io/ioutil"
+	"log"
+	"math/rand"
 )
 
 type Account struct {
@@ -25,6 +29,15 @@ type Account struct {
 	AuthClaim  *core.Claim        `json:"authClaim"`
 	Claims     []*core.Claim      `json:"claims"`
 	Identity   *Identity          `json:"identity"`
+}
+
+type Config struct {
+	Issuer Issuer `yaml:"issuer"`
+}
+
+type Issuer struct {
+	URL string `yaml:"url"`
+	ID  string `yaml:"id"`
 }
 
 func NewAccount() *Account {
@@ -93,4 +106,19 @@ func (account *Account) addClaim(claim ClaimAPI) []byte {
 	account.RotRoot = account.Identity.Rot.Root()
 	account.Claims = append(account.Claims, newClaim)
 	return inputJSON
+}
+
+func (account *Account) GenerateProof(request protocol.AuthorizationRequestMessage) ([]byte, error) {
+	rules := request.Body.Scope[0].Rules
+	jsonStr, err := json.Marshal(rules["query"])
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to convert query into jsonStr")
+	}
+	var query pubsignals.Query
+	if err := json.Unmarshal(jsonStr, &query); err != nil {
+		return nil, errors.Wrap(err, "Failed to typecast rule to pubsignals.Query")
+	}
+	parsedQuery, _ := ValidateAndGetCircuitsQuery(query, context.Background(), loaders.DefaultSchemaLoader{IpfsURL: ""})
+	challenge := new(big.Int).SetInt64(1)
+	return account.Identity.GenerateProof(challenge, *parsedQuery, query.Schema)
 }
