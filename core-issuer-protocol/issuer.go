@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"math/big"
 
+	circuits "github.com/iden3/go-circuits"
 	core "github.com/iden3/go-iden3-core"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/poseidon"
+	"github.com/iden3/go-iden3-crypto/utils"
 	merkletree "github.com/iden3/go-merkletree-sql"
 	"github.com/iden3/go-merkletree-sql/db/memory"
 )
@@ -27,20 +29,30 @@ type Account struct {
 }
 
 type Identity struct {
-	PrivateKey babyjub.PrivateKey     `json:"private_key"`
-	ID         *core.ID               `json:"id"`
-	Clt        *merkletree.MerkleTree `json:"clt"`
-	Ret        *merkletree.MerkleTree `json:"ret"`
-	Rot        *merkletree.MerkleTree `json:"rot"`
-	AuthClaim  *core.Claim            `json:"authClaim"`
+	PrivateKey      babyjub.PrivateKey     `json:"private_key"`
+	ID              *core.ID               `json:"id"`
+	Clt             *merkletree.MerkleTree `json:"clt"`
+	Ret             *merkletree.MerkleTree `json:"ret"`
+	Rot             *merkletree.MerkleTree `json:"rot"`
+	AuthClaim       *core.Claim            `json:"authClaim"`
+	AuthState       *circuits.TreeState    `json:"authState"`
+	AuthMTPProof    *merkletree.Proof      `json:"authMTPProof"`
+	AuthNonRevProof *merkletree.Proof      `json:"authNonRevProof"`
 }
 
 type Issuer struct {
-	ID        *core.ID           `json:"id"`
-	IDS       *merkletree.Hash   `json:"identity_state"`
-	PublicKey *babyjub.PublicKey `json:"public_key"`
-	Claims    []*core.Claim      `json:"claims"`
-	Identity  *Identity          `json:"identity"`
+	ID                  *core.ID               `json:"id"`
+	IDS                 *merkletree.Hash       `json:"identity_state"`
+	PublicKey           *babyjub.PublicKey     `json:"public_key"`
+	Claims              []*core.Claim          `json:"claims"`
+	Identity            *Identity              `json:"identity"`
+	IdToOfferedClaimMap map[string]*core.Claim `json:"id_to_claim_map"`
+}
+
+type OfferClaim struct {
+	ID          string   `json:"id"`
+	CallBackURL string   `json:"callback_url"`
+	IssuerID    *core.ID `json:"issuer_id"`
 }
 
 type Claim struct {
@@ -89,13 +101,28 @@ func generateIssuerIdentity(ctx context.Context, privateKey babyjub.PrivateKey, 
 		rot.Root().BigInt())
 	id, _ := core.IdGenesisFromIdenState(core.TypeDefault, idenState.BigInt())
 
+	authTreeState := circuits.TreeState{
+		State:          idenState,
+		ClaimsRoot:     clt.Root(),
+		RevocationRoot: &merkletree.HashZero,
+		RootOfRoots:    &merkletree.HashZero,
+	}
+
+	authMtpProof, _, _ := clt.GenerateProof(ctx, hIndex, clt.Root())
+
+	authClaimRevNonce := new(big.Int).SetUint64(authClaim.GetRevocationNonce())
+	authNonRevProof, _, _ := ret.GenerateProof(ctx, authClaimRevNonce, ret.Root())
+
 	issuerIdentity := &Identity{
-		PrivateKey: privateKey,
-		ID:         id,
-		Clt:        clt,
-		Ret:        ret,
-		Rot:        rot,
-		AuthClaim:  authClaim,
+		PrivateKey:      privateKey,
+		ID:              id,
+		Clt:             clt,
+		Ret:             ret,
+		Rot:             rot,
+		AuthClaim:       authClaim,
+		AuthState:       &authTreeState,
+		AuthMTPProof:    authMtpProof,
+		AuthNonRevProof: authNonRevProof,
 	}
 
 	// Print Roots of Merkle Trees
@@ -106,7 +133,9 @@ func generateIssuerIdentity(ctx context.Context, privateKey babyjub.PrivateKey, 
 	return issuerIdentity
 }
 
-func generateAgeClaim(babyJubjubPubKey *babyjub.PublicKey) *core.Claim {
+// TO-DO: Use logic from Iden3-SDK instead of this
+func generateAgeClaim(issuerIdentity *Identity, holderID string) *circuits.Claim {
+	ctx := context.Background()
 	claimSchemaHashHex := generateHashFromClaimSchemaFile("student-age.json-ld", "AgeCredential")
 	claimSchemaHash, _ := core.NewSchemaHashFromHex(claimSchemaHashHex)
 
@@ -119,22 +148,81 @@ func generateAgeClaim(babyJubjubPubKey *babyjub.PublicKey) *core.Claim {
 
 	birthday := big.NewInt(19960424)
 
-	claim, _ := core.NewClaim(claimSchemaHash,
+	ageClaim, _ := core.NewClaim(claimSchemaHash,
 		core.WithIndexDataInts(birthday, big.NewInt(0)),
 		core.WithRevocationNonce(revNonce),
 		core.WithIndexID(subjectId))
 
-	claimToMarshal, _ := json.Marshal(claim)
-	fmt.Println("Auth Claim:", string(claimToMarshal))
-	return claim
+	hIndexAgeClaim, hValueageClaim, _ := ageClaim.HiHv()
+	claimHash, _ := merkletree.HashElems(hIndexAgeClaim, hValueageClaim)
+
+	claimSignature := issuerIdentity.PrivateKey.SignPoseidon(claimHash.BigInt())
+
+	// Add Age Claim to Claim Merkle Tree
+	issuerIdentity.Clt.Add(ctx, hIndexAgeClaim, hValueageClaim)
+
+	// Generate Proof of Claim
+	ageClaimProof, _, _ := issuerIdentity.Clt.GenerateProof(ctx, hIndexAgeClaim, issuerIdentity.Clt.Root())
+
+	// Generate Revocation Proof
+	claimRevNonce := new(big.Int).SetUint64(ageClaim.GetRevocationNonce())
+	proofNotRevoke, _, _ := issuerIdentity.Ret.GenerateProof(ctx, claimRevNonce, issuerIdentity.Ret.Root())
+
+	idsAfterClaimAdd, _ := merkletree.HashElems(
+		issuerIdentity.Clt.Root().BigInt(),
+		issuerIdentity.Ret.Root().BigInt(),
+		issuerIdentity.Rot.Root().BigInt())
+
+	issuerStateAfterClaimAdd := circuits.TreeState{
+		State:          idsAfterClaimAdd,
+		ClaimsRoot:     issuerIdentity.Clt.Root(),
+		RevocationRoot: issuerIdentity.Ret.Root(),
+		RootOfRoots:    issuerIdentity.Rot.Root(),
+	}
+
+	claimIssuerSignature := circuits.BJJSignatureProof{
+		IssuerID:           issuerIdentity.ID,
+		IssuerTreeState:    *issuerIdentity.AuthState,
+		IssuerAuthClaimMTP: issuerIdentity.AuthMTPProof,
+		Signature:          claimSignature,
+		IssuerAuthClaim:    issuerIdentity.AuthClaim,
+		IssuerAuthNonRevProof: circuits.ClaimNonRevStatus{
+			TreeState: *issuerIdentity.AuthState,
+			Proof:     issuerIdentity.AuthNonRevProof,
+		},
+	}
+
+	holderAgeClaim := circuits.Claim{
+		Claim:     ageClaim,
+		Proof:     ageClaimProof,
+		TreeState: issuerStateAfterClaimAdd,
+		IssuerID:  issuerIdentity.ID,
+		NonRevProof: &circuits.ClaimNonRevStatus{
+			TreeState: issuerStateAfterClaimAdd,
+			Proof:     proofNotRevoke,
+		},
+		SignatureProof: claimIssuerSignature,
+	}
+
+	claimToMarshal, _ := json.Marshal(holderAgeClaim)
+	fmt.Println("Age Claim:", string(claimToMarshal))
+	return &holderAgeClaim
 }
 
-func (identity *Identity) offerClaim(claim *core.Claim) {
-	// TO-D0: Add logic to offer a claim to the user
+func (identity *Identity) offerClaimById(id string) *OfferClaim {
+	return &OfferClaim{
+		ID:          id,
+		CallBackURL: "http://localhost:8080/claim/offer/" + id + "/callback",
+		IssuerID:    identity.ID,
+	}
 }
 
 func (identity *Identity) revokeClaim(claim *core.Claim) {
 	// TO-D0: Add logic to revoke a claim
+}
+
+func (identity *Identity) issueClaim(id string) {
+	// TO-D0: Add logic to update a claim
 }
 
 func (identity *Identity) IssueClaimBySignature(claim *core.Claim) {
@@ -188,12 +276,6 @@ func IssueClaim(holderID string) []Claim {
 // 	ctx := context.Background()
 // 	issuerIdentity := generateIssuerIdentity(ctx, babyJubjubPrivKey, authClaim)
 
-// 	ageClaim := generateAgeClaim(babyJubjubPubKey)
-// 	// Offer a claim to the user
-// 	issuerIdentity.offerClaim(ageClaim)
-
-// 	// Issue a claim
-// 	issuerIdentity.IssueClaimBySignature(ageClaim)
-// 	// identity, _ := core.NewIdentity(babyJubjubPrivKey, authClaim)
+	generateAgeClaim(issuerIdentity, "113TCVw5KMeMp99Qdvub9Mssfz7krL9jWNvbdB7Fd2")
 
 // }

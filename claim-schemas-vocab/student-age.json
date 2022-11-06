@@ -1,0 +1,14 @@
+{
+    "$id": "https://github.com/saganshul/capstone/claim-schema-vocab/student-age.json",
+    "$schema": "https://github.com/saganshul/capstone/claim-schemas/student-age.json-ld#AgeCredential",
+    "title": "Vocabulary for Iden3 Credential specific type in a json Format",
+    "type": "DateOfBirth",
+    "properties": {   
+        "BirthDay": {
+            "display": "BirthDay",
+            "description": "Student Date of Birth",
+            "type": "number",
+            "format": "number"
+        }
+    }
+}
