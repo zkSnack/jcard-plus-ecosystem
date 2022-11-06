@@ -127,9 +127,12 @@ func (identity *Identity) addClaim(claim ClaimAPI) ([]byte, *core.Claim) {
 	return inputBytes, claimToAdd
 }
 
-func (identity *Identity) addClaimFromIssuer(claim circuits.Claim) {
+func (identity *Identity) addClaimsFromIssuer(claims []circuits.Claim) {
 	// TODO: Better key for looking up Claims
-	identity.Claims[claim.Claim.GetSchemaHash().BigInt()] = claim
+	for _, claim := range claims {
+		fmt.Println(claim)
+		identity.Claims[claim.Claim.GetSchemaHash().BigInt()] = claim
+	}
 }
 
 func (identity *Identity) GenerateProof(challenge *big.Int, query circuits.Query, schema protocol.Schema) ([]byte, error) {
