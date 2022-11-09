@@ -2,43 +2,68 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
+	"io/ioutil"
+	"math/big"
+	"math/rand"
+	"time"
+
 	"github.com/iden3/go-circuits"
+	"github.com/iden3/go-iden3-auth/loaders"
+	"github.com/iden3/go-iden3-auth/pubsignals"
 	core "github.com/iden3/go-iden3-core"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/iden3/go-merkletree-sql/v2"
 	"github.com/iden3/go-merkletree-sql/v2/db/memory"
+	"github.com/iden3/iden3comm/packers"
 	"github.com/iden3/iden3comm/protocol"
 	"github.com/pkg/errors"
-	"log"
-	"math/big"
-	"time"
 )
 
 type Identity struct {
-	PrivateKey babyjub.PrivateKey
-	ID         *core.ID
-	Clt        *merkletree.MerkleTree
-	Ret        *merkletree.MerkleTree
-	Rot        *merkletree.MerkleTree
-	AuthClaim  *core.Claim
-	Claims     map[string]circuits.Claim
+	ID             *core.ID                  `json:"id"`
+	IDS            *merkletree.Hash          `json:"identity_state"`
+	PrivateKey     babyjub.PrivateKey        `json:"private_key"`
+	AuthClaim      *core.Claim               `json:"authClaim"`
+	Claims         []*core.Claim             `json:"claims"`
+	Clt            *merkletree.MerkleTree    `json:"clt"`
+	Ret            *merkletree.MerkleTree    `json:"ret"`
+	Rot            *merkletree.MerkleTree    `json:"rot"`
+	ReceivedClaims map[string]circuits.Claim `json:"received_claims"`
 }
 
-func NewIdentity(privateKey babyjub.PrivateKey, ID *core.ID, clt *merkletree.MerkleTree, ret *merkletree.MerkleTree, rot *merkletree.MerkleTree, authClaim *core.Claim) *Identity {
-	return &Identity{PrivateKey: privateKey, ID: ID, Clt: clt, Ret: ret, Rot: rot, AuthClaim: authClaim, Claims: make(map[string]circuits.Claim)}
+type Config struct {
+	Issuer Issuer `yaml:"issuer"`
 }
 
-func FromFileData(account *Account) *Identity {
+type Issuer struct {
+	URL string `yaml:"url"`
+	ID  string `yaml:"id"`
+}
+
+func NewIdentity() (*Identity, error) {
+	babyJubjubPrivKey := babyjub.NewRandPrivKey()
+	babyJubjubPubKey := babyJubjubPrivKey.Public()
+
 	ctx := context.Background()
+
+	authSchemaHash, _ := core.NewSchemaHashFromHex("ca938857241db9451ea329256b9c06e5")
+	authClaim, _ := core.NewClaim(authSchemaHash,
+		core.WithIndexDataInts(babyJubjubPubKey.X, babyJubjubPubKey.Y),
+		core.WithRevocationNonce(rand.Uint64()))
+
 	clt, _ := merkletree.NewMerkleTree(ctx, memory.NewMemoryStorage(), 32)
 	ret, _ := merkletree.NewMerkleTree(ctx, memory.NewMemoryStorage(), 32)
 	rot, _ := merkletree.NewMerkleTree(ctx, memory.NewMemoryStorage(), 32)
 
-	hIndex, hValue, _ := account.AuthClaim.HiHv()
+	// Get the Index of the claim and the Value of the authClaim
+	hIndex, hValue, _ := authClaim.HiHv()
 
-	clt.Add(ctx, hIndex, hValue)
+	err := clt.Add(ctx, hIndex, hValue)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error while adding AuthClaim to the Clt during NewIdentity Generation")
+	}
 
 	state, _ := merkletree.HashElems(
 		clt.Root().BigInt(),
@@ -47,28 +72,74 @@ func FromFileData(account *Account) *Identity {
 
 	id, _ := core.IdGenesisFromIdenState(core.TypeDefault, state.BigInt())
 
-	if id.String() != account.ID.String() {
-		log.Fatal("ID differs while recreating it from json file.", id, account.ID)
+	identity := Identity{
+		ID:             id,
+		IDS:            state,
+		PrivateKey:     babyJubjubPrivKey,
+		AuthClaim:      authClaim,
+		Claims:         make([]*core.Claim, 0),
+		Clt:            clt,
+		Ret:            ret,
+		Rot:            rot,
+		ReceivedClaims: make(map[string]circuits.Claim),
 	}
-
-	for i := 0; i < len(account.Claims); i++ {
-		hIndex, hValue, _ := account.Claims[i].HiHv()
-		clt.Add(ctx, hIndex, hValue)
-	}
-
-	state, _ = merkletree.HashElems(
-		clt.Root().BigInt(),
-		ret.Root().BigInt(),
-		rot.Root().BigInt())
-
-	if state.String() != account.IDS.String() {
-		log.Fatal("IDS differs while recreating it from json file.")
-	}
-
-	return NewIdentity(account.PrivateKey, account.ID, clt, ret, rot, account.AuthClaim)
+	return &identity, nil
 }
 
-func (identity *Identity) addClaim(claim ClaimAPI) ([]byte, *core.Claim) {
+func LoadIdentityFromFile(file string) (*Identity, error) {
+	identity := new(Identity)
+	content, err := ioutil.ReadFile(file)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(content, identity)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error during Unmarshal of identity file")
+	}
+
+	ctx := context.Background()
+	identity.Clt, _ = merkletree.NewMerkleTree(ctx, memory.NewMemoryStorage(), 32)
+	identity.Ret, _ = merkletree.NewMerkleTree(ctx, memory.NewMemoryStorage(), 32)
+	identity.Rot, _ = merkletree.NewMerkleTree(ctx, memory.NewMemoryStorage(), 32)
+
+	hIndex, hValue, _ := identity.AuthClaim.HiHv()
+
+	err = identity.Clt.Add(ctx, hIndex, hValue)
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed while adding auth claim from JSON File")
+	}
+
+	state := identity.GetIDS()
+
+	id, _ := core.IdGenesisFromIdenState(core.TypeDefault, state.BigInt())
+
+	// Check if the generated ID from Genesis state is same as we have in the file.
+	if id.String() != identity.ID.String() {
+		return nil, errors.Errorf("ID differs while recreating it from json file. Generated id is %s but in file it is %s", id.String(), identity.ID.String())
+	}
+
+	// TODO: Handle Ret Tree
+	for _, claim := range identity.Claims {
+		// Before updating the claims tree, add the claims tree root at Genesis state to the Roots tree.
+		err := identity.Rot.Add(ctx, identity.Clt.Root().BigInt(), big.NewInt(0))
+		if err != nil {
+			return nil, errors.Wrap(err, "Error while adding the root of the Clt to the Rot In the load file func.")
+		}
+		hIndex, hValue, _ := claim.HiHv()
+		err = identity.Clt.Add(ctx, hIndex, hValue)
+		if err != nil {
+			return nil, errors.Wrap(err, "Failed while adding claims to the Clt from JSON File")
+		}
+	}
+
+	if identity.GetIDS().String() != identity.IDS.String() {
+		return nil, errors.Errorf("IDS differs while recreating it from json file. Generated IDS is %s but in file it is %s", identity.GetIDS().String(), identity.IDS.String())
+	}
+	return identity, nil
+}
+
+func (identity *Identity) AddClaim(claim ClaimAPI) error {
 	ctx := context.Background()
 
 	authClaim := identity.AuthClaim
@@ -83,24 +154,29 @@ func (identity *Identity) addClaim(claim ClaimAPI) ([]byte, *core.Claim) {
 
 	oldState := identity.GetIDS()
 	isOldStateGenesis := identity.IsAtGenesisState()
-	oldTreeState := circuits.TreeState{
-		State:          oldState,
-		ClaimsRoot:     identity.Clt.Root(),
-		RevocationRoot: identity.Ret.Root(),
-		RootOfRoots:    identity.Rot.Root(),
-	}
+	oldTreeState := identity.GetTreeState()
 
 	// Before updating the claims tree, add the claims tree root at Genesis state to the Roots tree.
-	identity.Rot.Add(ctx, identity.Clt.Root().BigInt(), big.NewInt(0))
+	err := identity.Rot.Add(ctx, identity.Clt.Root().BigInt(), big.NewInt(0))
+	if err != nil {
+		return errors.Wrap(err, "Error while adding the root of the Clt to the Rot")
+	}
 
 	claimToAdd := createIden3ClaimFromAPI(claim)
 	hIndex, hValue, _ := claimToAdd.HiHv()
 
-	identity.Clt.Add(ctx, hIndex, hValue)
+	err = identity.Clt.Add(ctx, hIndex, hValue)
+	if err != nil {
+		return errors.Wrap(err, "Error while adding the new claim to Clt")
+	}
+	// Add the claim to our array
+	identity.Claims = append(identity.Claims, claimToAdd)
+
 	// Fetch the new Identity State
 	newState := identity.GetIDS()
+	identity.IDS = newState
 
-	// Sign a message (hash of the genesis state + the new state) using your private key
+	// Sign a message (hash of the old state + the new state) using your private key
 	hashOldAndNewStates, _ := poseidon.Hash([]*big.Int{oldState.BigInt(), newState.BigInt()})
 
 	signature := identity.PrivateKey.SignPoseidon(hashOldAndNewStates)
@@ -120,27 +196,44 @@ func (identity *Identity) addClaim(claim ClaimAPI) ([]byte, *core.Claim) {
 		},
 		Signature: signature,
 	}
-	fmt.Println(stateTransitionInputs)
 
 	// Perform marshalling of the state transition inputs
 	inputBytes, _ := stateTransitionInputs.InputsMarshal()
-	return inputBytes, claimToAdd
+	_, err = GenerateZkProof("compiled-circuits/stateTransition", toJSON(inputBytes))
+	if err != nil {
+		return errors.Wrap(err, "Error while creating proof using snarkJS")
+	}
+	// TODO: Call smart contract from here to update state on Blockchain
+	return nil
 }
 
-func (identity *Identity) addClaimsFromIssuer(claims []circuits.Claim) {
+func (identity *Identity) AddClaimsFromIssuer(claims []circuits.Claim) error {
 	// TODO: Better key for looking up Claims
 	for _, claim := range claims {
-		fmt.Println("Claim: ", claim)
 		schemaHash, _ := claim.Claim.GetSchemaHash().MarshalText()
-		identity.Claims[string(schemaHash)] = claim
+		identity.ReceivedClaims[string(schemaHash)] = claim
 	}
+	return nil
 }
 
-func (identity *Identity) GenerateProof(challenge *big.Int, query circuits.Query, schema protocol.Schema) ([]byte, error) {
-	schemaHash := GetHashFromClaimSchemaURL(schema.URL, schema.Type)
-	fmt.Println(schemaHash)
+func (identity *Identity) ProofRequest(request protocol.AuthorizationRequestMessage) (*protocol.AuthorizationResponseMessage, error) {
+	rules := request.Body.Scope[0].Rules
+	jsonStr, err := json.Marshal(rules["query"])
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to convert query into jsonStr")
+	}
+	var query pubsignals.Query
+	if err := json.Unmarshal(jsonStr, &query); err != nil {
+		return nil, errors.Wrap(err, "Failed to typecast rule to pubsignals.Query")
+	}
+	parsedQuery, _ := ValidateAndGetCircuitsQuery(query, context.Background(), loaders.DefaultSchemaLoader{IpfsURL: ""})
+
+	challenge := new(big.Int).SetInt64(1)
+	schemaHash := GetHashFromClaimSchemaURL(query.Schema.URL, query.Schema.Type)
+
 	// TODO: Get Dynamic circuit name from proof request
-	if val, ok := identity.Claims[schemaHash]; ok {
+	circuitName := circuits.AtomicQuerySigCircuitID
+	if val, ok := identity.ReceivedClaims[schemaHash]; ok {
 		atomicInputs := circuits.AtomicQuerySigInputs{
 			ID:               identity.ID,
 			AuthClaim:        identity.GetUserAuthClaim(),
@@ -148,15 +241,37 @@ func (identity *Identity) GenerateProof(challenge *big.Int, query circuits.Query
 			Signature:        identity.PrivateKey.SignPoseidon(challenge),
 			CurrentTimeStamp: time.Now().Unix(),
 			Claim:            val,
-			Query:            query,
+			Query:            *parsedQuery,
 		}
 		inputBytes, err := atomicInputs.InputsMarshal()
 		if err != nil {
-			fmt.Println("Error during Generate Proof: ", err)
+			return nil, errors.Wrapf(err, "Error during marshalling of %s circuit inputs", circuitName)
 		}
-		return inputBytes, nil
+		proof, err := GenerateZkProof("compiled-circuits/credentialAtomicQuerySig", toJSON(inputBytes))
+		if err != nil {
+			return nil, errors.Wrap(err, "Error while generating proof using snarkJS")
+		}
+		resp := protocol.AuthorizationResponseMessage{
+			ID:       request.ID,
+			Typ:      packers.MediaTypePlainMessage,
+			Type:     protocol.AuthorizationResponseMessageType,
+			ThreadID: request.ThreadID,
+			Body: protocol.AuthorizationMessageResponseBody{
+				Message: "test",
+				Scope: []protocol.ZeroKnowledgeProofResponse{
+					{
+						ID:        1,
+						CircuitID: string(circuits.AtomicQuerySigCircuitID),
+						ZKProof:   *proof,
+					},
+				},
+			},
+			From: identity.ID.String(),
+			To:   request.From,
+		}
+		return &resp, nil
 	} else {
-		return nil, errors.New("failed to serialize public signals into json")
+		return nil, errors.New("Requested claim does not exists in the wallet.")
 	}
 }
 

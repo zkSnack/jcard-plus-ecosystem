@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/iden3/go-circuits"
-	"github.com/iden3/go-rapidsnark/types"
-	"github.com/iden3/iden3comm/packers"
 	"github.com/iden3/iden3comm/protocol"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
@@ -18,121 +16,111 @@ import (
 )
 
 func main() {
-	config := readConfig("config.yaml")
-	noAccount := true
-	var account *Account
+	config, err := readConfig("config.yaml")
+	if err != nil {
+		log.Fatalf("Failed while loading config file. Error %s", err)
+	}
+	var identity *Identity
 	if _, err := os.Stat("./account.json"); err == nil {
-
-		account = LoadAccountFromFile("./account.json")
-		noAccount = false
+		identity, err = LoadIdentityFromFile("./account.json")
+		if err != nil {
+			log.Fatalf("Failed to load identity from the File. Err %s", err)
+		}
+		log.Println("Account loaded from saved file: account.json")
+	} else {
+		identity, err = generateAccount()
+		if err != nil {
+			log.Fatalf("Error %s. Failed to create new identity. Aborting...", err)
+		}
 	}
 
 	router := gin.Default()
-
-	if noAccount {
-		router.POST("/api/v1/generate", generateAccount)
-	}
-
-	router.POST("/api/v1/addClaim", addClaim(account))
-	router.POST("/api/v1/requestProof", requestProof(account))
-	router.POST("/api/v1/getClaims", getClaims(account, config))
+	router.POST("/api/v1/addClaim", addClaim(identity))
+	router.POST("/api/v1/requestProof", requestProof(identity))
+	router.POST("/api/v1/getClaims", getClaims(identity, config))
+	router.GET("/api/v1/getAccount", getAccount(identity))
 
 	router.Run("localhost:8080")
 }
 
-func readConfig(file string) Config {
+func readConfig(file string) (*Config, error) {
 	yfile, err := ioutil.ReadFile(file)
-
 	if err != nil {
-		log.Fatal(err)
+		return nil, errors.Wrap(err, "Failed to open the config file.")
 	}
 
-	var config Config
-	err2 := yaml.Unmarshal(yfile, &config)
-	if err2 != nil {
-		log.Fatal(err2)
+	config := new(Config)
+	err = yaml.Unmarshal(yfile, config)
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to unmarshal the yaml file.")
 	}
-	return config
+	return config, nil
 }
 
-func generateAccount(c *gin.Context) {
-	account := NewAccount()
-	file, _ := json.MarshalIndent(account, "", "	")
-	_ = ioutil.WriteFile("account.json", file, 0644)
-	c.IndentedJSON(http.StatusOK, account)
+func generateAccount() (*Identity, error) {
+	if identity, err := NewIdentity(); err == nil {
+		err = dumpIdentity(identity)
+		if err != nil {
+			return nil, err
+		}
+		return identity, nil
+	} else {
+		return nil, errors.Wrap(err, "Failed to create new identity")
+	}
 }
 
-func addClaim(account *Account) gin.HandlerFunc {
+func getAccount(identity *Identity) gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		c.IndentedJSON(http.StatusOK, identity)
+	}
+	return gin.HandlerFunc(fn)
+}
+
+func addClaim(identity *Identity) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		var newClaim ClaimAPI
 
 		if err := c.BindJSON(&newClaim); err != nil {
-			log.Println("Error while parsing claim JSON object. Err: ", err)
-			return
+			c.IndentedJSON(http.StatusBadRequest, "Error while parsing claimAPI JSON object")
+		} else {
+			err := identity.AddClaim(newClaim)
+			if err != nil {
+				log.Printf("Failed to create new claim. Err %s\n", err)
+				c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to create new claim")
+			}
+			err = dumpIdentity(identity)
+			if err != nil {
+				c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to update account file")
+			} else {
+				c.IndentedJSON(http.StatusCreated, identity)
+			}
 		}
-
-		inputJSON := toJSON(account.addClaim(newClaim))
-		/*proof, err := GenerateZkProof("compiled-circuits/stateTransition", inputJSON)
-		if err != nil {
-			log.Fatal("Something went wrong", err)
-		}*/
-		c.IndentedJSON(http.StatusCreated, inputJSON)
 	}
-
 	return gin.HandlerFunc(fn)
 }
 
-func requestProof(account *Account) gin.HandlerFunc {
+func requestProof(identity *Identity) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		var request protocol.AuthorizationRequestMessage
 
 		if err := c.BindJSON(&request); err != nil {
-			fmt.Println("Error while parsing request JSON object. Err: ", err)
-			c.IndentedJSON(http.StatusBadRequest, err)
+			fmt.Println("Error while parsing AuthorizationRequestMessage JSON object. Err: ", err)
+			c.IndentedJSON(http.StatusInternalServerError, err)
 		} else {
-			inputBytes, err := account.GenerateProof(request)
-			if err != nil {
-				c.IndentedJSON(http.StatusBadRequest, err)
-			} else {
-				inputJSON := toJSON(inputBytes)
-				proof, err := GenerateZkProof("compiled-circuits/credentialAtomicQuerySig", inputJSON)
-				if err != nil {
-					log.Fatal("Something went wrong", err)
-				}
-				resp := prepareProofRequestResponse(proof, request, account)
+			if resp, err := identity.ProofRequest(request); err == nil {
 				c.IndentedJSON(http.StatusCreated, resp)
+			} else {
+				log.Printf("Failed to process proof request. Err %s\n", err)
+				c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to generate proof")
 			}
 		}
 	}
-
 	return gin.HandlerFunc(fn)
 }
 
-func prepareProofRequestResponse(proof *types.ZKProof, authReq protocol.AuthorizationRequestMessage, account *Account) protocol.AuthorizationResponseMessage {
-	resp := protocol.AuthorizationResponseMessage{
-		ID:       authReq.ID,
-		Typ:      packers.MediaTypePlainMessage,
-		Type:     protocol.AuthorizationResponseMessageType,
-		ThreadID: authReq.ThreadID,
-		Body: protocol.AuthorizationMessageResponseBody{
-			Message: "test",
-			Scope: []protocol.ZeroKnowledgeProofResponse{
-				{
-					ID:        1,
-					CircuitID: string(circuits.AtomicQuerySigCircuitID),
-					ZKProof:   *proof,
-				},
-			},
-		},
-		From: account.ID.String(),
-		To:   authReq.From,
-	}
-	return resp
-}
-
-func sendRequestToIssuerToGetClaims(account *Account, config Config) ([]circuits.Claim, error) {
+func sendRequestToIssuerToGetClaims(identity *Identity, config *Config) ([]circuits.Claim, error) {
 	postBody, _ := json.Marshal(map[string]string{
-		"id":    account.ID.String(),
+		"id":    identity.ID.String(),
 		"token": "fe7d9c51-5dcf-46dd-8bbc-ae9a0b716ee3",
 	})
 	responseBody := bytes.NewBuffer(postBody)
@@ -151,21 +139,41 @@ func sendRequestToIssuerToGetClaims(account *Account, config Config) ([]circuits
 	if err != nil {
 		return nil, errors.Wrap(err, "Error unmarshaling data from response.")
 	}
-	fmt.Println(claims)
 	return claims, nil
 }
 
-func getClaims(account *Account, config Config) gin.HandlerFunc {
+func getClaims(identity *Identity, config *Config) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
-		claims, err := sendRequestToIssuerToGetClaims(account, config)
+		claims, err := sendRequestToIssuerToGetClaims(identity, config)
 		if err != nil {
 			fmt.Println(err)
 			c.IndentedJSON(http.StatusCreated, err)
 			return
 		}
-		account.Identity.addClaimsFromIssuer(claims)
-		c.IndentedJSON(http.StatusCreated, account)
+		if err := identity.AddClaimsFromIssuer(claims); err != nil {
+			log.Printf("Error while adding issued claim to the wallet. Err %s\n", err)
+			c.IndentedJSON(http.StatusInternalServerError, "Failed to add issued claim to the wallet")
+		} else {
+			err = dumpIdentity(identity)
+			if err != nil {
+				c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to update account file")
+			} else {
+				c.IndentedJSON(http.StatusCreated, identity)
+			}
+		}
 	}
-
 	return gin.HandlerFunc(fn)
+}
+
+func dumpIdentity(identity *Identity) error {
+	file, err := json.MarshalIndent(identity, "", "	")
+	if err != nil {
+		return errors.Wrap(err, "Failed to json MarshalIdent identity struct")
+	}
+	err = ioutil.WriteFile("account.json", file, 0644)
+	if err != nil {
+		return errors.Wrap(err, "Failed to write identity state to the file")
+	}
+	log.Println("Account.json updated to latest identity state")
+	return nil
 }
