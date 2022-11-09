@@ -23,11 +23,11 @@ type Identity struct {
 	Ret        *merkletree.MerkleTree
 	Rot        *merkletree.MerkleTree
 	AuthClaim  *core.Claim
-	Claims     map[*big.Int]circuits.Claim
+	Claims     map[string]circuits.Claim
 }
 
 func NewIdentity(privateKey babyjub.PrivateKey, ID *core.ID, clt *merkletree.MerkleTree, ret *merkletree.MerkleTree, rot *merkletree.MerkleTree, authClaim *core.Claim) *Identity {
-	return &Identity{PrivateKey: privateKey, ID: ID, Clt: clt, Ret: ret, Rot: rot, AuthClaim: authClaim}
+	return &Identity{PrivateKey: privateKey, ID: ID, Clt: clt, Ret: ret, Rot: rot, AuthClaim: authClaim, Claims: make(map[string]circuits.Claim)}
 }
 
 func FromFileData(account *Account) *Identity {
@@ -130,15 +130,17 @@ func (identity *Identity) addClaim(claim ClaimAPI) ([]byte, *core.Claim) {
 func (identity *Identity) addClaimsFromIssuer(claims []circuits.Claim) {
 	// TODO: Better key for looking up Claims
 	for _, claim := range claims {
-		fmt.Println(claim)
-		identity.Claims[claim.Claim.GetSchemaHash().BigInt()] = claim
+		fmt.Println("Claim: ", claim)
+		schemaHash, _ := claim.Claim.GetSchemaHash().MarshalText()
+		identity.Claims[string(schemaHash)] = claim
 	}
 }
 
 func (identity *Identity) GenerateProof(challenge *big.Int, query circuits.Query, schema protocol.Schema) ([]byte, error) {
-	schemaHash, _ := core.NewSchemaHashFromHex(GetHashFromClaimSchemaURL(schema.URL, schema.Type))
+	schemaHash := GetHashFromClaimSchemaURL(schema.URL, schema.Type)
+	fmt.Println(schemaHash)
 	// TODO: Get Dynamic circuit name from proof request
-	if val, ok := identity.Claims[schemaHash.BigInt()]; ok {
+	if val, ok := identity.Claims[schemaHash]; ok {
 		atomicInputs := circuits.AtomicQuerySigInputs{
 			ID:               identity.ID,
 			AuthClaim:        identity.GetUserAuthClaim(),

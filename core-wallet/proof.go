@@ -7,6 +7,7 @@ import (
 	"github.com/iden3/go-circuits"
 	"github.com/iden3/go-iden3-auth/loaders"
 	"github.com/iden3/go-iden3-auth/pubsignals"
+	"github.com/iden3/go-rapidsnark/types"
 	"github.com/iden3/go-schema-processor/processor"
 	"io/ioutil"
 	"log"
@@ -29,23 +30,8 @@ const (
 // ZKInputs are inputs for proof generation
 type ZKInputs map[string]interface{}
 
-// ZKProof is structure that represents SnarkJS library result of proof generation
-type ZKProof struct {
-	A        []string   `json:"pi_a"`
-	B        [][]string `json:"pi_b"`
-	C        []string   `json:"pi_c"`
-	Protocol string     `json:"protocol"`
-	Curve    string     `json:"curve"`
-}
-
-// FullProof is ZKP proof with public signals
-type FullProof struct {
-	Proof      *ZKProof `json:"proof"`
-	PubSignals []string `json:"pub_signals"`
-}
-
 // GenerateZkProof executes snarkjs groth16prove function and returns proof only if it's valid
-func GenerateZkProof(circuitPath string, inputs ZKInputs) (*FullProof, error) {
+func GenerateZkProof(circuitPath string, inputs ZKInputs) (*types.ZKProof, error) {
 
 	if path.Clean(circuitPath) != circuitPath {
 		return nil, fmt.Errorf("illegal circuitPath")
@@ -143,7 +129,7 @@ func GenerateZkProof(circuitPath string, inputs ZKInputs) (*FullProof, error) {
 		return nil, errors.New("invalid proof")
 	}
 
-	var proof ZKProof
+	var proof types.ProofData
 	var pubSignals []string
 
 	// read generated public signals
@@ -167,11 +153,11 @@ func GenerateZkProof(circuitPath string, inputs ZKInputs) (*FullProof, error) {
 		return nil, errors.Wrap(err, "failed to unmarshal generated proof")
 	}
 
-	return &FullProof{Proof: &proof, PubSignals: pubSignals}, nil
+	return &types.ZKProof{Proof: &proof, PubSignals: pubSignals}, nil
 }
 
 // VerifyZkProof executes snarkjs verify function and returns if proof is valid
-func VerifyZkProof(circuitPath string, zkp *FullProof) error {
+func VerifyZkProof(circuitPath string, zkp *types.ZKProof) error {
 
 	if path.Clean(circuitPath) != circuitPath {
 		return fmt.Errorf("illegal circuitPath")

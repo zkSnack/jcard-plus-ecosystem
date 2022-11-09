@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/iden3/go-circuits"
+	"github.com/iden3/go-rapidsnark/types"
+	"github.com/iden3/iden3comm/packers"
 	"github.com/iden3/iden3comm/protocol"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
@@ -93,11 +95,12 @@ func requestProof(account *Account) gin.HandlerFunc {
 				c.IndentedJSON(http.StatusBadRequest, err)
 			} else {
 				inputJSON := toJSON(inputBytes)
-				/*proof, err := GenerateZkProof("compiled-circuits/stateTransition", inputJSON)
+				proof, err := GenerateZkProof("compiled-circuits/credentialAtomicQuerySig", inputJSON)
 				if err != nil {
 					log.Fatal("Something went wrong", err)
-				}*/
-				c.IndentedJSON(http.StatusCreated, inputJSON)
+				}
+				resp := prepareProofRequestResponse(proof, request, account)
+				c.IndentedJSON(http.StatusCreated, resp)
 			}
 		}
 	}
@@ -105,14 +108,36 @@ func requestProof(account *Account) gin.HandlerFunc {
 	return gin.HandlerFunc(fn)
 }
 
+func prepareProofRequestResponse(proof *types.ZKProof, authReq protocol.AuthorizationRequestMessage, account *Account) protocol.AuthorizationResponseMessage {
+	resp := protocol.AuthorizationResponseMessage{
+		ID:       authReq.ID,
+		Typ:      packers.MediaTypePlainMessage,
+		Type:     protocol.AuthorizationResponseMessageType,
+		ThreadID: authReq.ThreadID,
+		Body: protocol.AuthorizationMessageResponseBody{
+			Message: "test",
+			Scope: []protocol.ZeroKnowledgeProofResponse{
+				{
+					ID:        1,
+					CircuitID: string(circuits.AtomicQuerySigCircuitID),
+					ZKProof:   *proof,
+				},
+			},
+		},
+		From: account.ID.String(),
+		To:   authReq.From,
+	}
+	return resp
+}
+
 func sendRequestToIssuerToGetClaims(account *Account, config Config) ([]circuits.Claim, error) {
 	postBody, _ := json.Marshal(map[string]string{
 		"id":    account.ID.String(),
-		"token": "token",
+		"token": "fe7d9c51-5dcf-46dd-8bbc-ae9a0b716ee3",
 	})
 	responseBody := bytes.NewBuffer(postBody)
 
-	resp, err := http.Post(config.Issuer.URL+"/getClaims", "application/json", responseBody)
+	resp, err := http.Post(config.Issuer.URL+"/api/v1/issueClaim", "application/json", responseBody)
 	if err != nil {
 		log.Fatalf("An Error Occured %v", err)
 	}
@@ -139,6 +164,7 @@ func getClaims(account *Account, config Config) gin.HandlerFunc {
 			return
 		}
 		account.Identity.addClaimsFromIssuer(claims)
+		c.IndentedJSON(http.StatusCreated, account)
 	}
 
 	return gin.HandlerFunc(fn)
