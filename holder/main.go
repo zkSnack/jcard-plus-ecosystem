@@ -8,11 +8,13 @@ import (
 	"github.com/iden3/go-circuits"
 	"github.com/iden3/iden3comm/protocol"
 	"github.com/pkg/errors"
-	"gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+
+	"zkSnacks/walletsdk"
 )
 
 func main() {
@@ -20,9 +22,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed while loading config file. Error %s", err)
 	}
-	var identity *Identity
+	var identity *walletsdk.Identity
 	if _, err := os.Stat("./account.json"); err == nil {
-		identity, err = LoadIdentityFromFile("./account.json")
+		identity, err = walletsdk.LoadIdentityFromFile("./account.json")
 		if err != nil {
 			log.Fatalf("Failed to load identity from the File. Err %s", err)
 		}
@@ -35,21 +37,21 @@ func main() {
 	}
 
 	router := gin.Default()
-	router.POST("/api/v1/addClaim", addClaim(identity))
-	router.POST("/api/v1/requestProof", requestProof(identity))
+	router.POST("/api/v1/addClaim", addClaim(identity, config))
+	router.POST("/api/v1/requestProof", requestProof(identity, config))
 	router.POST("/api/v1/getClaims", getClaims(identity, config))
 	router.GET("/api/v1/getAccount", getAccount(identity))
 
 	router.Run("localhost:8080")
 }
 
-func readConfig(file string) (*Config, error) {
+func readConfig(file string) (*walletsdk.Config, error) {
 	yfile, err := ioutil.ReadFile(file)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to open the config file.")
 	}
 
-	config := new(Config)
+	config := new(walletsdk.Config)
 	err = yaml.Unmarshal(yfile, config)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to unmarshal the yaml file.")
@@ -57,8 +59,8 @@ func readConfig(file string) (*Config, error) {
 	return config, nil
 }
 
-func generateAccount() (*Identity, error) {
-	if identity, err := NewIdentity(); err == nil {
+func generateAccount() (*walletsdk.Identity, error) {
+	if identity, err := walletsdk.NewIdentity(); err == nil {
 		err = dumpIdentity(identity)
 		if err != nil {
 			return nil, err
@@ -69,21 +71,21 @@ func generateAccount() (*Identity, error) {
 	}
 }
 
-func getAccount(identity *Identity) gin.HandlerFunc {
+func getAccount(identity *walletsdk.Identity) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		c.IndentedJSON(http.StatusOK, identity)
 	}
 	return gin.HandlerFunc(fn)
 }
 
-func addClaim(identity *Identity) gin.HandlerFunc {
+func addClaim(identity *walletsdk.Identity, config *walletsdk.Config) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
-		var newClaim ClaimAPI
+		var newClaim walletsdk.ClaimAPI
 
 		if err := c.BindJSON(&newClaim); err != nil {
 			c.IndentedJSON(http.StatusBadRequest, "Error while parsing claimAPI JSON object")
 		} else {
-			err := identity.AddClaim(newClaim)
+			err := identity.AddClaim(newClaim, config)
 			if err != nil {
 				log.Printf("Failed to create new claim. Err %s\n", err)
 				c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to create new claim")
@@ -99,7 +101,7 @@ func addClaim(identity *Identity) gin.HandlerFunc {
 	return gin.HandlerFunc(fn)
 }
 
-func requestProof(identity *Identity) gin.HandlerFunc {
+func requestProof(identity *walletsdk.Identity, config *walletsdk.Config) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		var request protocol.AuthorizationRequestMessage
 
@@ -107,7 +109,7 @@ func requestProof(identity *Identity) gin.HandlerFunc {
 			fmt.Println("Error while parsing AuthorizationRequestMessage JSON object. Err: ", err)
 			c.IndentedJSON(http.StatusInternalServerError, err)
 		} else {
-			if resp, err := identity.ProofRequest(request); err == nil {
+			if resp, err := identity.ProofRequest(request, config); err == nil {
 				c.IndentedJSON(http.StatusCreated, resp)
 			} else {
 				log.Printf("Failed to process proof request. Err %s\n", err)
@@ -118,7 +120,7 @@ func requestProof(identity *Identity) gin.HandlerFunc {
 	return gin.HandlerFunc(fn)
 }
 
-func sendRequestToIssuerToGetClaims(identity *Identity, config *Config) ([]circuits.Claim, error) {
+func sendRequestToIssuerToGetClaims(identity *walletsdk.Identity, config *walletsdk.Config) ([]circuits.Claim, error) {
 	postBody, _ := json.Marshal(map[string]string{
 		"id":    identity.ID.String(),
 		"token": "fe7d9c51-5dcf-46dd-8bbc-ae9a0b716ee3",
@@ -142,7 +144,7 @@ func sendRequestToIssuerToGetClaims(identity *Identity, config *Config) ([]circu
 	return claims, nil
 }
 
-func getClaims(identity *Identity, config *Config) gin.HandlerFunc {
+func getClaims(identity *walletsdk.Identity, config *walletsdk.Config) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		claims, err := sendRequestToIssuerToGetClaims(identity, config)
 		if err != nil {
@@ -165,7 +167,7 @@ func getClaims(identity *Identity, config *Config) gin.HandlerFunc {
 	return gin.HandlerFunc(fn)
 }
 
-func dumpIdentity(identity *Identity) error {
+func dumpIdentity(identity *walletsdk.Identity) error {
 	file, err := json.MarshalIndent(identity, "", "	")
 	if err != nil {
 		return errors.Wrap(err, "Failed to json MarshalIdent identity struct")

@@ -1,4 +1,4 @@
-package main
+package walletsdk
 
 import (
 	"context"
@@ -34,12 +34,14 @@ type Identity struct {
 }
 
 type Config struct {
-	Issuer Issuer `yaml:"issuer"`
-}
-
-type Issuer struct {
-	URL string `yaml:"url"`
-	ID  string `yaml:"id"`
+	Issuer struct {
+		URL string `yaml:"url"`
+		ID  string `yaml:"id"`
+	} `yaml:"issuer"`
+	Circuits struct {
+		Path string `yaml:"path"`
+		JS   string `yaml:"js"`
+	} `yaml:"circuits"`
 }
 
 func NewIdentity() (*Identity, error) {
@@ -139,7 +141,7 @@ func LoadIdentityFromFile(file string) (*Identity, error) {
 	return identity, nil
 }
 
-func (identity *Identity) AddClaim(claim ClaimAPI) error {
+func (identity *Identity) AddClaim(claim ClaimAPI, config *Config) error {
 	ctx := context.Background()
 
 	authClaim := identity.AuthClaim
@@ -199,7 +201,7 @@ func (identity *Identity) AddClaim(claim ClaimAPI) error {
 
 	// Perform marshalling of the state transition inputs
 	inputBytes, _ := stateTransitionInputs.InputsMarshal()
-	_, err = GenerateZkProof("compiled-circuits/stateTransition", toJSON(inputBytes))
+	_, err = GenerateZkProof(config.Circuits.Path+"stateTransition", toJSON(inputBytes), config)
 	if err != nil {
 		return errors.Wrap(err, "Error while creating proof using snarkJS")
 	}
@@ -216,7 +218,7 @@ func (identity *Identity) AddClaimsFromIssuer(claims []circuits.Claim) error {
 	return nil
 }
 
-func (identity *Identity) ProofRequest(request protocol.AuthorizationRequestMessage) (*protocol.AuthorizationResponseMessage, error) {
+func (identity *Identity) ProofRequest(request protocol.AuthorizationRequestMessage, config *Config) (*protocol.AuthorizationResponseMessage, error) {
 	rules := request.Body.Scope[0].Rules
 	jsonStr, err := json.Marshal(rules["query"])
 	if err != nil {
@@ -247,7 +249,7 @@ func (identity *Identity) ProofRequest(request protocol.AuthorizationRequestMess
 		if err != nil {
 			return nil, errors.Wrapf(err, "Error during marshalling of %s circuit inputs", circuitName)
 		}
-		proof, err := GenerateZkProof("compiled-circuits/credentialAtomicQuerySig", toJSON(inputBytes))
+		proof, err := GenerateZkProof(config.Circuits.Path+"credentialAtomicQuerySig", toJSON(inputBytes), config)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error while generating proof using snarkJS")
 		}

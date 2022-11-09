@@ -1,4 +1,4 @@
-package main
+package walletsdk
 
 import (
 	"encoding/json"

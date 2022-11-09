@@ -1,4 +1,4 @@
-package main
+package walletsdk
 
 import (
 	"context"
@@ -31,7 +31,7 @@ const (
 type ZKInputs map[string]interface{}
 
 // GenerateZkProof executes snarkjs groth16prove function and returns proof only if it's valid
-func GenerateZkProof(circuitPath string, inputs ZKInputs) (*types.ZKProof, error) {
+func GenerateZkProof(circuitPath string, inputs ZKInputs, config *Config) (*types.ZKProof, error) {
 
 	if path.Clean(circuitPath) != circuitPath {
 		return nil, fmt.Errorf("illegal circuitPath")
@@ -72,7 +72,7 @@ func GenerateZkProof(circuitPath string, inputs ZKInputs) (*types.ZKProof, error
 	}
 
 	// calculate witness
-	wtnsCmd := exec.Command("node", "js/generate_witness.js", circuitPath+"/circuit.wasm", inputFile.Name(), wtnsFile.Name())
+	wtnsCmd := exec.Command("node", config.Circuits.JS+"generate_witness.js", circuitPath+"/circuit.wasm", inputFile.Name(), wtnsFile.Name())
 	wtnsOut, err := wtnsCmd.CombinedOutput()
 	if err != nil {
 		log.Println("failed to calculate witness", "wtnsOut", string(wtnsOut))
