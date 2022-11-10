@@ -2,204 +2,150 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
+	"io/ioutil"
+	"log"
 	"math/big"
+	"os"
+
+	yaml "gopkg.in/yaml.v2"
 
 	circuits "github.com/iden3/go-circuits"
-	core "github.com/iden3/go-iden3-core"
-	"github.com/iden3/go-iden3-crypto/babyjub"
-	"github.com/iden3/go-iden3-crypto/utils"
 	merkletree "github.com/iden3/go-merkletree-sql/v2"
-	"github.com/iden3/go-merkletree-sql/v2/db/memory"
+	"github.com/pkg/errors"
+
+	"zkSnacks/walletsdk"
 )
 
-type Identity struct {
-	PrivateKey      babyjub.PrivateKey     `json:"private_key"`
-	ID              *core.ID               `json:"id"`
-	Clt             *merkletree.MerkleTree `json:"clt"`
-	Ret             *merkletree.MerkleTree `json:"ret"`
-	Rot             *merkletree.MerkleTree `json:"rot"`
-	AuthClaim       *core.Claim            `json:"authClaim"`
-	AuthState       *circuits.TreeState    `json:"authState"`
-	AuthMTPProof    *merkletree.Proof      `json:"authMTPProof"`
-	AuthNonRevProof *merkletree.Proof      `json:"authNonRevProof"`
-	IDS             *merkletree.Hash       `json:"identity_state"`
+type Issuer struct {
+	Config       *walletsdk.Config         `json:"config"`
+	Identity     *walletsdk.Identity       `json:"identity"`
+	IssuedClaims map[string]circuits.Claim `json:"issued_claims"`
 }
 
-func generateAuthClaim(babyJubjubPubKey *babyjub.PublicKey) *core.Claim {
-	authSchemaHashHex := generateHashFromClaimSchemaFile("auth.json-ld", "AuthBJJCredential")
-	authSchemaHash, _ := core.NewSchemaHashFromHex(authSchemaHashHex)
+const (
+	CLAIM_SCHEMA_ROOT_DIR = "../claim-schemas/"
+)
 
-	// Add revocation nonce. Used to invalidate the claim. Update it to random number once finish testing.
-	revNonce := uint64(1)
-	// revNonce := rand.Uint64()
+// Duplicate code from holder. Doesn't want to update HTTP endpoint for my needs
+// TO-DO: Use logic from holder package instead of this? Might move code to utils package?
+func readConfig(filename string) (*walletsdk.Config, error) {
+	yfile, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to open the config file.")
+	}
 
-	authClaim, _ := core.NewClaim(authSchemaHash,
-		core.WithIndexDataInts(babyJubjubPubKey.X, babyJubjubPubKey.Y),
-		core.WithRevocationNonce(revNonce))
-
-	return authClaim
+	config := new(walletsdk.Config)
+	err = yaml.Unmarshal(yfile, config)
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to unmarshal the yaml file.")
+	}
+	return config, nil
 }
 
-func generateIssuerIdentity(ctx context.Context, privateKey babyjub.PrivateKey, authClaim *core.Claim) *Identity {
-	// Claim Merkle Tree
-	clt, _ := merkletree.NewMerkleTree(ctx, memory.NewMemoryStorage(), 32)
-
-	// Revocation Merkle Tree
-	ret, _ := merkletree.NewMerkleTree(ctx, memory.NewMemoryStorage(), 32)
-
-	// Roots Merkle Tree
-	rot, _ := merkletree.NewMerkleTree(ctx, memory.NewMemoryStorage(), 32)
-
-	hIndex, hValue, _ := authClaim.HiHv()
-
-	// Add Auth Claim to Claim Merkle Tree
-	clt.Add(ctx, hIndex, hValue)
-
-	// idenState, _ := core.IdenState(clt, ret, rot)
-	idenState, _ := merkletree.HashElems(
-		clt.Root().BigInt(),
-		ret.Root().BigInt(),
-		rot.Root().BigInt())
-	id, _ := core.IdGenesisFromIdenState(core.TypeDefault, idenState.BigInt())
-
-	authTreeState := circuits.TreeState{
-		State:          idenState,
-		ClaimsRoot:     clt.Root(),
-		RevocationRoot: &merkletree.HashZero,
-		RootOfRoots:    &merkletree.HashZero,
+// Duplicate code from holder. Doesn't want to update HTTP endpoint for my needs
+func generateAccount() (*walletsdk.Identity, error) {
+	if identity, err := walletsdk.NewIdentity(); err == nil {
+		err = dumpIdentity(identity)
+		if err != nil {
+			return nil, err
+		}
+		return identity, nil
+	} else {
+		return nil, errors.Wrap(err, "Failed to create new identity")
 	}
-
-	authMtpProof, _, _ := clt.GenerateProof(ctx, hIndex, clt.Root())
-
-	authClaimRevNonce := new(big.Int).SetUint64(authClaim.GetRevocationNonce())
-	authNonRevProof, _, _ := ret.GenerateProof(ctx, authClaimRevNonce, ret.Root())
-
-	issuerIdentity := &Identity{
-		PrivateKey:      privateKey,
-		ID:              id,
-		Clt:             clt,
-		Ret:             ret,
-		Rot:             rot,
-		AuthClaim:       authClaim,
-		AuthState:       &authTreeState,
-		AuthMTPProof:    authMtpProof,
-		AuthNonRevProof: authNonRevProof,
-		IDS:             idenState,
-	}
-
-	// Print Roots of Merkle Trees
-	fmt.Println("Genesis ID:", issuerIdentity.ID)
-	return issuerIdentity
 }
 
-// TO-DO: Use logic from Iden3-SDK instead of this
-func generateAgeClaim(issuerIdentity *Identity, holderID string, token string) *circuits.Claim {
-
-	studentInfo := getStudentInfoByToken(token)
-
-	ctx := context.Background()
-	claimSchemaHashHex := generateHashFromClaimSchemaFile("student-age.json-ld", "AgeCredential")
-	claimSchemaHash, _ := core.NewSchemaHashFromHex(claimSchemaHashHex)
-
-	subjectId, _ := core.IDFromString(holderID)
-
-	// Add revocation nonce. Used to invalidate the claim. Update it to random number once finish testing.
-	revNonce := uint64(7)
-	// revNonce := rand.Uint64()
-
-	birthday := new(big.Int)
-	birthday.SetString(studentInfo.BirthDate, 10)
-
-	ageClaim, _ := core.NewClaim(claimSchemaHash,
-		core.WithIndexDataInts(birthday, big.NewInt(0)),
-		core.WithRevocationNonce(revNonce),
-		core.WithIndexID(subjectId))
-
-	hIndexAgeClaim, hValueageClaim, _ := ageClaim.HiHv()
-	claimHash, _ := merkletree.HashElems(hIndexAgeClaim, hValueageClaim)
-
-	claimSignature := issuerIdentity.PrivateKey.SignPoseidon(claimHash.BigInt())
-
-	// Add Age Claim to Claim Merkle Tree
-	issuerIdentity.Clt.Add(ctx, hIndexAgeClaim, hValueageClaim)
-
-	// Generate Proof of Claim
-	ageClaimProof, _, _ := issuerIdentity.Clt.GenerateProof(ctx, hIndexAgeClaim, issuerIdentity.Clt.Root())
-
-	// Generate Revocation Proof
-	claimRevNonce := new(big.Int).SetUint64(ageClaim.GetRevocationNonce())
-	proofNotRevoke, _, _ := issuerIdentity.Ret.GenerateProof(ctx, claimRevNonce, issuerIdentity.Ret.Root())
-
-	idsAfterClaimAdd, _ := merkletree.HashElems(
-		issuerIdentity.Clt.Root().BigInt(),
-		issuerIdentity.Ret.Root().BigInt(),
-		issuerIdentity.Rot.Root().BigInt())
-
-	issuerIdentity.IDS = idsAfterClaimAdd
-
-	issuerStateAfterClaimAdd := circuits.TreeState{
-		State:          idsAfterClaimAdd,
-		ClaimsRoot:     issuerIdentity.Clt.Root(),
-		RevocationRoot: issuerIdentity.Ret.Root(),
-		RootOfRoots:    issuerIdentity.Rot.Root(),
+// Duplicate code from holder. Doesn't want to update HTTP endpoint for my needs
+func dumpIdentity(identity *walletsdk.Identity) error {
+	file, err := json.MarshalIndent(identity, "", "	")
+	if err != nil {
+		return errors.Wrap(err, "Failed to json MarshalIdent identity struct")
 	}
+	err = ioutil.WriteFile("account.json", file, 0644)
+	if err != nil {
+		return errors.Wrap(err, "Failed to write identity state to the file")
+	}
+	log.Println("Account.json updated to latest identity state")
+	return nil
+}
+
+func NewIssuer() *Issuer {
+	config, err := readConfig("../holder/config.yaml")
+	if err != nil {
+		log.Fatalf("Failed while loading config file. Error %s", err)
+	}
+	var identity *walletsdk.Identity
+	if _, err := os.Stat("./account.json"); err == nil {
+		identity, err = walletsdk.LoadIdentityFromFile("./account.json")
+		if err != nil {
+			log.Fatalf("Failed to load identity from the File. Err %s", err)
+		}
+		log.Println("Account loaded from saved file: account.json")
+	} else {
+		identity, err = generateAccount()
+		if err != nil {
+			log.Fatalf("Error %s. Failed to create new identity. Aborting...", err)
+		}
+	}
+	return &Issuer{
+		Identity:     identity,
+		Config:       config,
+		IssuedClaims: make(map[string]circuits.Claim),
+	}
+}
+
+func (i *Issuer) IssueClaim(claim walletsdk.ClaimAPI) *circuits.Claim {
+	// Get core claim from Claim API
+	claimToAdd := walletsdk.CreateIden3ClaimFromAPI(claim)
+	i.Identity.AddClaim(claim, i.Config)
+	hIndexClaim, hValueClaim, _ := claimToAdd.HiHv()
+	claimHash, _ := merkletree.HashElems(hIndexClaim, hValueClaim)
+
+	// Generate proof of claim
+	claimProof, _, _ := i.Identity.Clt.GenerateProof(context.Background(), hIndexClaim, i.Identity.Clt.Root())
+	claimRevNonce := new(big.Int).SetUint64(claimToAdd.GetRevocationNonce())
+	proofNotRevoke, _, _ := i.Identity.Ret.GenerateProof(context.Background(), claimRevNonce, i.Identity.Ret.Root())
+
+	// Sign claim
+	claimSignature := i.Identity.PrivateKey.SignPoseidon(claimHash.BigInt())
+
+	// Generate circuit.Claim
+	issuerAuthClaimMTP := i.Identity.GetUserAuthClaim()
+	currentTreeState := i.Identity.GetTreeState()
 
 	claimIssuerSignature := circuits.BJJSignatureProof{
-		IssuerID:           issuerIdentity.ID,
-		IssuerTreeState:    *issuerIdentity.AuthState,
-		IssuerAuthClaimMTP: issuerIdentity.AuthMTPProof,
-		Signature:          claimSignature,
-		IssuerAuthClaim:    issuerIdentity.AuthClaim,
-		IssuerAuthNonRevProof: circuits.ClaimNonRevStatus{
-			TreeState: *issuerIdentity.AuthState,
-			Proof:     issuerIdentity.AuthNonRevProof,
-		},
+		IssuerID:              i.Identity.ID,
+		IssuerTreeState:       issuerAuthClaimMTP.TreeState,
+		IssuerAuthClaimMTP:    issuerAuthClaimMTP.Proof,
+		Signature:             claimSignature,
+		IssuerAuthClaim:       issuerAuthClaimMTP.Claim,
+		IssuerAuthNonRevProof: *issuerAuthClaimMTP.NonRevProof,
 	}
 
-	holderAgeClaim := circuits.Claim{
-		Claim:     ageClaim,
-		Proof:     ageClaimProof,
-		TreeState: issuerStateAfterClaimAdd,
-		IssuerID:  issuerIdentity.ID,
+	signedClaim := circuits.Claim{
+		Claim:     claimToAdd,
+		Proof:     claimProof,
+		TreeState: currentTreeState,
+		IssuerID:  i.Identity.ID,
 		NonRevProof: &circuits.ClaimNonRevStatus{
-			TreeState: issuerStateAfterClaimAdd,
+			TreeState: currentTreeState,
 			Proof:     proofNotRevoke,
 		},
 		SignatureProof: claimIssuerSignature,
 	}
 
-	// fmt.Println("Age Claim:")
-	// claimMarshelText, _ := json.MarshalIndent(holderAgeClaim, "", "\t")
-	// fmt.Println(string(claimMarshelText))
-	return &holderAgeClaim
+	i.IssuedClaims[claim.ClaimSchemaHashHex] = signedClaim
+
+	return &signedClaim
 }
 
-func IssueClaims(token string, holderID string) []circuits.Claim {
-	babyJubjubPrivKeyString := "0x8a2e1766a7f4851b6d27d313b7c4b7b271772763eb33466c50671f3e8597c658"
-	babyJubjubPrivKeyInByte, _ := utils.HexDecode(babyJubjubPrivKeyString)
-	var babyJubjubPrivKey babyjub.PrivateKey
-	copy(babyJubjubPrivKey[:], babyJubjubPrivKeyInByte)
-	// babyJubjubPrivKey := babyjub.NewRandPrivKey()
-	fmt.Println("Private Key: ", babyJubjubPrivKey)
-
-	// generate public key from private key
-	babyJubjubPubKey := babyJubjubPrivKey.Public()
-
-	// print public key
-	fmt.Println("BabyJubJub Public Key:", babyJubjubPubKey)
-
-	// 2. Create an Identity
-
-	// 2.1 Create an Auth Claim
-	authClaim := generateAuthClaim(babyJubjubPubKey)
-
-	// 2.2 Generate an identity
-	ctx := context.Background()
-	issuerIdentity := generateIssuerIdentity(ctx, babyJubjubPrivKey, authClaim)
-
+// Returns all the claims
+// TO-DO: Only return claims associated with particular holder
+func (i *Issuer) GetIssuedClaims() []circuits.Claim {
 	var claims []circuits.Claim
-	claims = append(claims, *generateAgeClaim(issuerIdentity, holderID, token))
-
+	for _, claim := range i.IssuedClaims {
+		claims = append(claims, claim)
+	}
 	return claims
 }

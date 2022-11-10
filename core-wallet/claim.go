@@ -2,8 +2,6 @@ package walletsdk
 
 import (
 	"fmt"
-	core "github.com/iden3/go-iden3-core"
-	"github.com/iden3/go-iden3-crypto/keccak256"
 	"io"
 	"io/ioutil"
 	"log"
@@ -12,21 +10,32 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	core "github.com/iden3/go-iden3-core"
+	"github.com/iden3/go-iden3-crypto/keccak256"
 )
 
 type ClaimAPI struct {
-	SubjectID      string   `json:"subject_id"`
-	ClaimSchema    string   `json:"claim_schema"`
-	CredentialType string   `json:"credential_type"`
-	IndexSlotA     *big.Int `json:"index_slot_a"`
-	IndexSlotB     *big.Int `json:"index_slot_b"`
-	ValueSlotA     *big.Int `json:"value_slot_a"`
-	ValueSlotB     *big.Int `json:"value_slot_b"`
-	ExpirationDate int64    `json:"expiration_date"`
+	SubjectID          string   `json:"subject_id"`
+	ClaimSchema        string   `json:"claim_schema"`
+	ClaimSchemaHashHex string   `json:"claim_schema_hash_hex"`
+	CredentialType     string   `json:"credential_type"`
+	IndexSlotA         *big.Int `json:"index_slot_a"`
+	IndexSlotB         *big.Int `json:"index_slot_b"`
+	ValueSlotA         *big.Int `json:"value_slot_a"`
+	ValueSlotB         *big.Int `json:"value_slot_b"`
+	ExpirationDate     int64    `json:"expiration_date"`
 }
 
-func createIden3ClaimFromAPI(claim ClaimAPI) *core.Claim {
-	schema, _ := core.NewSchemaHashFromHex(GetHashFromClaimSchemaURL(claim.ClaimSchema, claim.CredentialType))
+func CreateIden3ClaimFromAPI(claim ClaimAPI) *core.Claim {
+	var schema core.SchemaHash
+	if claim.ClaimSchemaHashHex != "" {
+		schema, _ = core.NewSchemaHashFromHex(claim.ClaimSchemaHashHex)
+	} else if claim.ClaimSchema != "" {
+		schema, _ = core.NewSchemaHashFromHex(GetHashFromClaimSchema(claim.ClaimSchema, claim.CredentialType))
+	} else {
+		log.Fatal("No schema hash or schema file provided")
+	}
 
 	var options []core.Option
 

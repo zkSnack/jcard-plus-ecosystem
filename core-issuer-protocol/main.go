@@ -12,19 +12,27 @@ type IssueClaimsBody struct {
 }
 
 func main() {
+
 	LoadStudentInfo()
+
+	issuer := NewIssuer()
+
 	router := gin.Default()
 
-	router.POST("/api/v1/issueClaim", issueClaim)
+	router.POST("/api/v1/issueClaim", issueClaims(issuer))
 
 	router.Run("localhost:8090")
 }
 
-func issueClaim(c *gin.Context) {
+func issueClaims(issuer *Issuer) gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		var body IssueClaimsBody
+		c.BindJSON(&body)
 
-	var jsonBody IssueClaimsBody
-	c.BindJSON(&jsonBody)
-
-	claims := IssueClaims(jsonBody.Token, jsonBody.ID)
-	c.IndentedJSON(http.StatusOK, claims)
+		ageClaimAPI := generateAgeClaim(body.Token, body.ID)
+		issuer.IssueClaim(*ageClaimAPI)
+		claims := issuer.GetIssuedClaims()
+		c.IndentedJSON(http.StatusOK, claims)
+	}
+	return gin.HandlerFunc(fn)
 }
