@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"log"
 )
@@ -40,7 +39,7 @@ func LoadStudentInfo() {
 		idToStudentInfo[student.Token] = &student
 	}
 
-	fmt.Printf("Successfully loaded %d students data\n", len(students))
+	log.Printf("Successfully loaded %d students data\n", len(students))
 }
 
 func getStudentInfoByToken(token string) (*Student, error) {

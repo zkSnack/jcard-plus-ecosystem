@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -32,7 +32,7 @@ func issueClaims(jhuIssuer *Issuer) gin.HandlerFunc {
 
 		ageClaimAPI, err := generateAgeClaim(body.ID, body.Token)
 		if err != nil {
-			fmt.Println("Error when generating age claim: ", err)
+			log.Println("Error when generating age claim: ", err)
 			c.JSON(http.StatusBadRequest, map[string]interface{}{"error": "Error occurred while generating age claim"})
 		} else {
 			jhuIssuer.IssueClaim(*ageClaimAPI)
