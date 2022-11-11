@@ -6,6 +6,11 @@ circuits:
   path: ../static/compiled-circuits/
   js: ../static/js/
 
+web3:
+  stateTransition: "0x36903ff6896444251cED8Da47326De635a3c9d9d"
+  url: "https://polygon-testnet.public.blastapi.io"
+  chainID: 80001
+  privateKey: "<PRIVATE_KEY>"
 
 
 
@@ -13,11 +18,7 @@ circuits:
 
 
 
-
-
-
-
-
+git ad
 
 
 

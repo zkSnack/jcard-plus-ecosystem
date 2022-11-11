@@ -42,6 +42,12 @@ type Config struct {
 		Path string `yaml:"path"`
 		JS   string `yaml:"js"`
 	} `yaml:"circuits"`
+	Web3 struct {
+		StateTransition string   `yaml:"stateTransition"`
+		URL             string   `yaml:"url"`
+		PrivateKey      string   `yaml:"privateKey"`
+		ChainID         *big.Int `yaml:"chainID"`
+	} `yaml:"web3"`
 }
 
 func NewIdentity() (*Identity, error) {
@@ -201,11 +207,11 @@ func (identity *Identity) AddClaim(claim ClaimAPI, config *Config) error {
 
 	// Perform marshalling of the state transition inputs
 	inputBytes, _ := stateTransitionInputs.InputsMarshal()
-	_, err = GenerateZkProof(config.Circuits.Path+"stateTransition", toJSON(inputBytes), config)
+	proof, err := GenerateZkProof(config.Circuits.Path+"stateTransition", toJSON(inputBytes), config)
 	if err != nil {
 		return errors.Wrap(err, "Error while creating proof using snarkJS")
 	}
-	// TODO: Call smart contract from here to update state on Blockchain
+	TransitState(config, identity.ID, proof)
 	return nil
 }
 
