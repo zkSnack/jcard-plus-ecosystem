@@ -27,7 +27,7 @@ const (
 	CLAIM_SCHEMA_ROOT_DIR = "../claim-schemas/"
 )
 
-// Duplicate code from holder. Doesn't want to update HTTP endpoint for my needs
+// Duplicate code from holder. Didn't want to update HTTP endpoint for my needs
 // TO-DO: Use logic from holder package instead of this? Might move code to utils package?
 func readConfig(filename string) (*walletsdk.Config, error) {
 	yfile, err := ioutil.ReadFile(filename)
@@ -43,7 +43,7 @@ func readConfig(filename string) (*walletsdk.Config, error) {
 	return config, nil
 }
 
-// Duplicate code from holder. Doesn't want to update HTTP endpoint for my needs
+// Duplicate code from holder.  Didn't want to update HTTP endpoint for my needs
 func generateAccount() (*walletsdk.Identity, error) {
 	if identity, err := walletsdk.NewIdentity(); err == nil {
 		err = dumpIdentity(identity)
@@ -56,7 +56,7 @@ func generateAccount() (*walletsdk.Identity, error) {
 	}
 }
 
-// Duplicate code from holder. Doesn't want to update HTTP endpoint for my needs
+// Duplicate code from holder.  Didn't want to update HTTP endpoint for my needs
 func dumpIdentity(identity *walletsdk.Identity) error {
 	file, err := json.MarshalIndent(identity, "", "	")
 	if err != nil {
@@ -100,12 +100,22 @@ func (i *Issuer) IssueClaim(claim walletsdk.ClaimAPI) *circuits.Claim {
 	claimToAdd := walletsdk.CreateIden3ClaimFromAPI(claim)
 	i.Identity.AddClaim(claim, i.Config)
 	hIndexClaim, hValueClaim, _ := claimToAdd.HiHv()
-	claimHash, _ := merkletree.HashElems(hIndexClaim, hValueClaim)
+	claimHash, err := merkletree.HashElems(hIndexClaim, hValueClaim)
+	if err != nil {
+		log.Fatalf("Error %s. Failed to hash claim. Aborting...", err)
+	}
 
 	// Generate proof of claim
-	claimProof, _, _ := i.Identity.Clt.GenerateProof(context.Background(), hIndexClaim, i.Identity.Clt.Root())
+	claimProof, _, err := i.Identity.Clt.GenerateProof(context.Background(), hIndexClaim, i.Identity.Clt.Root())
+	if err != nil {
+		log.Fatalf("Error %s. Failed to generate MTP for claim. Aborting...", err)
+	}
+
 	claimRevNonce := new(big.Int).SetUint64(claimToAdd.GetRevocationNonce())
-	proofNotRevoke, _, _ := i.Identity.Ret.GenerateProof(context.Background(), claimRevNonce, i.Identity.Ret.Root())
+	proofNotRevoke, _, err := i.Identity.Ret.GenerateProof(context.Background(), claimRevNonce, i.Identity.Ret.Root())
+	if err != nil {
+		log.Fatalf("Error %s. Failed to generate revocation MTP for claim. Aborting...", err)
+	}
 
 	// Sign claim
 	claimSignature := i.Identity.PrivateKey.SignPoseidon(claimHash.BigInt())

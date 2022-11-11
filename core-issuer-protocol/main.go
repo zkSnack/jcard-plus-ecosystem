@@ -15,23 +15,23 @@ func main() {
 
 	LoadStudentInfo()
 
-	issuer := NewIssuer()
+	jhuIssuer := NewIssuer()
 
 	router := gin.Default()
 
-	router.POST("/api/v1/issueClaim", issueClaims(issuer))
+	router.POST("/api/v1/issueClaim", issueClaims(jhuIssuer))
 
 	router.Run("localhost:8090")
 }
 
-func issueClaims(issuer *Issuer) gin.HandlerFunc {
+func issueClaims(jhuIssuer *Issuer) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		var body IssueClaimsBody
 		c.BindJSON(&body)
 
 		ageClaimAPI := generateAgeClaim(body.Token, body.ID)
-		issuer.IssueClaim(*ageClaimAPI)
-		claims := issuer.GetIssuedClaims()
+		jhuIssuer.IssueClaim(*ageClaimAPI)
+		claims := jhuIssuer.GetIssuedClaims()
 		c.IndentedJSON(http.StatusOK, claims)
 	}
 	return gin.HandlerFunc(fn)
