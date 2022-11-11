@@ -1,0 +1,42 @@
+issuer:
+  url: http://localhost:8090
+  id: 116GWDn9usS47AyRQHVtLfx9hF9rdsFiyVsH7obPN7
+
+circuits:
+  path: ../static/compiled-circuits/
+  js: ../static/js/
+
+web3:
+  stateTransition: "0x87B36cE5393D4ea6EEf3eb7b1ca6aAd7ae295D4F"
+  url: "https://polygon-testnet.public.blastapi.io"
+  chainID: 80001
+  privateKey: "<PRIVATE_KEY>"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
