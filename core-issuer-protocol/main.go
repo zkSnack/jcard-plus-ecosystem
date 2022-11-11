@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"zkSnacks/walletsdk"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,6 +22,7 @@ func main() {
 	router := gin.Default()
 
 	router.POST("/api/v1/issueClaim", issueClaims(jhuIssuer))
+	router.GET("/api/v1/getCurrentState", getCurrentState(jhuIssuer.Config, jhuIssuer.Identity))
 
 	router.Run("localhost:8090")
 }
@@ -38,6 +40,19 @@ func issueClaims(jhuIssuer *Issuer) gin.HandlerFunc {
 			jhuIssuer.IssueClaim(*ageClaimAPI)
 			claims := jhuIssuer.GetIssuedClaims()
 			c.IndentedJSON(http.StatusOK, claims)
+		}
+	}
+	return gin.HandlerFunc(fn)
+}
+
+func getCurrentState(config *walletsdk.Config, identity *walletsdk.Identity) gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		state, err := walletsdk.GetCurrentState(config, identity.ID)
+		if err != nil {
+			log.Println("Error when getting current State: ", err)
+			c.JSON(http.StatusBadRequest, map[string]interface{}{"error": "Error occurred getting IDS from Blockchain"})
+		} else {
+			c.IndentedJSON(http.StatusOK, state)
 		}
 	}
 	return gin.HandlerFunc(fn)

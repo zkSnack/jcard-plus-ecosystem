@@ -2,6 +2,7 @@ package main
 
 import (
 	"math/big"
+	"time"
 	"zkSnacks/walletsdk"
 )
 
@@ -21,6 +22,7 @@ func generateAgeClaim(holderID string, token string) (*walletsdk.ClaimAPI, error
 		SubjectID:          holderID,
 		ClaimSchemaHashHex: claimSchemaHashHex,
 		IndexSlotA:         birthday,
+		ExpirationDate:     time.Now().Unix() + 31536000,
 	}
 
 	return &claimAPI, nil

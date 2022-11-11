@@ -98,7 +98,14 @@ func NewIssuer() *Issuer {
 func (i *Issuer) IssueClaim(claim walletsdk.ClaimAPI) *circuits.Claim {
 	// Get core claim from Claim API
 	claimToAdd := walletsdk.CreateIden3ClaimFromAPI(claim)
-	i.Identity.AddClaim(claim, i.Config)
+	err := i.Identity.AddClaim(claim, i.Config)
+	if err != nil {
+		log.Fatalf("Error %s. Failed to add claim. Aborting...", err)
+	}
+	err = dumpIdentity(i.Identity)
+	if err != nil {
+		log.Fatalf("Error %s. Failed to dump File. Aborting...", err)
+	}
 	hIndexClaim, hValueClaim, _ := claimToAdd.HiHv()
 	claimHash, err := merkletree.HashElems(hIndexClaim, hValueClaim)
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"math/big"
 	"math/rand"
 	"time"
@@ -161,7 +162,7 @@ func (identity *Identity) AddClaim(claim ClaimAPI, config *Config) error {
 	authNonRevMTPProof, _, _ := identity.Ret.GenerateProof(ctx, big.NewInt(int64(authClaimRevNonce)), identity.Ret.Root())
 
 	oldState := identity.GetIDS()
-	isOldStateGenesis := identity.IsAtGenesisState()
+	isOldStateGenesis, _ := identity.IsAtGenesisState()
 	oldTreeState := identity.GetTreeState()
 
 	// Before updating the claims tree, add the claims tree root at Genesis state to the Roots tree.
@@ -211,7 +212,11 @@ func (identity *Identity) AddClaim(claim ClaimAPI, config *Config) error {
 	if err != nil {
 		return errors.Wrap(err, "Error while creating proof using snarkJS")
 	}
-	TransitState(config, identity.ID, proof)
+	transaction, err := TransitState(config, identity.ID, proof)
+	if err != nil {
+		return errors.Wrap(err, "Errored while submitting transaction to blockchain")
+	}
+	log.Printf("Add Claim successful. Submitted to change state on blockchain with txID: %s\n", transaction.Hash().String())
 	return nil
 }
 
@@ -265,7 +270,7 @@ func (identity *Identity) ProofRequest(request protocol.AuthorizationRequestMess
 			Type:     protocol.AuthorizationResponseMessageType,
 			ThreadID: request.ThreadID,
 			Body: protocol.AuthorizationMessageResponseBody{
-				Message: "test",
+				Message: request.Body.Message,
 				Scope: []protocol.ZeroKnowledgeProofResponse{
 					{
 						ID:        1,
@@ -325,6 +330,10 @@ func (identity *Identity) GetUserAuthClaim() circuits.Claim {
 }
 
 // IsAtGenesisState TODO: Implement this function
-func (identity *Identity) IsAtGenesisState() bool {
-	return true
+func (identity *Identity) IsAtGenesisState() (bool, error) {
+	ans, err := checkGenesisStateID(identity.ID.BigInt(), identity.IDS.BigInt())
+	if err != nil {
+		return false, errors.Wrap(err, "Failed to check if state is genesis")
+	}
+	return ans, nil
 }

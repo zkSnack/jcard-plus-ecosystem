@@ -41,6 +41,7 @@ func main() {
 	router.POST("/api/v1/requestProof", requestProof(identity, config))
 	router.POST("/api/v1/getClaims", getClaims(identity, config))
 	router.GET("/api/v1/getAccount", getAccount(identity))
+	router.GET("/api/v1/getCurrentState", getCurrentState(config, identity))
 
 	router.Run("localhost:8080")
 }
@@ -74,6 +75,18 @@ func generateAccount() (*walletsdk.Identity, error) {
 func getAccount(identity *walletsdk.Identity) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		c.IndentedJSON(http.StatusOK, identity)
+	}
+	return gin.HandlerFunc(fn)
+}
+
+func getCurrentState(config *walletsdk.Config, identity *walletsdk.Identity) gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		state, err := walletsdk.GetCurrentState(config, identity.ID)
+		if err != nil {
+			c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to get IDS from smart contract")
+		} else {
+			c.IndentedJSON(http.StatusOK, state)
+		}
 	}
 	return gin.HandlerFunc(fn)
 }

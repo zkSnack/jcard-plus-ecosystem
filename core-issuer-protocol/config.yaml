@@ -1,6 +1,6 @@
 issuer:
   url: http://localhost:8090
-  id: 116GWDn9usS47AyRQHVtLfx9hF9rdsFiyVsH7obPN7
+  id: 118VZmZxJs1cZzzTcBsnbi77Pu6EnXqcpQRXG7UA2W
 
 circuits:
   path: ../static/compiled-circuits/
@@ -11,14 +11,6 @@ web3:
   url: "https://polygon-testnet.public.blastapi.io"
   chainID: 80001
   privateKey: "<PRIVATE_KEY>"
-
-
-
-
-
-
-
-
 
 
 

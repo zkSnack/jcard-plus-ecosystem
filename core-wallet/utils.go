@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	core "github.com/iden3/go-iden3-core"
+	"github.com/iden3/go-merkletree-sql/v2"
 	"log"
 	"math/big"
 	"strings"
@@ -40,4 +42,27 @@ func stringToBigInt(s string) (*big.Int, error) {
 		return nil, fmt.Errorf("can not parse string to *big.Int: %s", s)
 	}
 	return n, nil
+}
+
+func checkGenesisStateID(id, state *big.Int) (bool, error) {
+
+	stateHash, err := merkletree.NewHashFromBigInt(state)
+	if err != nil {
+		return false, err
+	}
+
+	IDFromState, err := core.IdGenesisFromIdenState(core.TypeDefault, stateHash.BigInt())
+	if err != nil {
+		return false, err
+	}
+
+	idBytes := merkletree.NewElemBytesFromBigInt(id)
+	IDFromParam, err := core.IDFromBytes(idBytes[:31])
+	if err != nil {
+		return false, err
+	}
+	if IDFromState.String() != IDFromParam.String() {
+		return false, nil
+	}
+	return true, nil
 }
