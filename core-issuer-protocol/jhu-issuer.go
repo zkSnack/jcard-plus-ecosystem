@@ -5,9 +5,12 @@ import (
 	"zkSnacks/walletsdk"
 )
 
-func generateAgeClaim(holderID string, token string) *walletsdk.ClaimAPI {
+func generateAgeClaim(holderID string, token string) (*walletsdk.ClaimAPI, error) {
 
-	studentInfo := getStudentInfoByToken(token)
+	studentInfo, err := getStudentInfoByToken(token)
+	if err != nil {
+		return nil, err
+	}
 
 	claimSchemaHashHex := walletsdk.GetHashFromClaimSchema(CLAIM_SCHEMA_ROOT_DIR+"student-age.json-ld", "AgeCredential")
 
@@ -20,5 +23,5 @@ func generateAgeClaim(holderID string, token string) *walletsdk.ClaimAPI {
 		IndexSlotA:         birthday,
 	}
 
-	return &claimAPI
+	return &claimAPI, nil
 }

@@ -145,6 +145,7 @@ func (i *Issuer) IssueClaim(claim walletsdk.ClaimAPI) *circuits.Claim {
 		SignatureProof: claimIssuerSignature,
 	}
 
+	// Use better key than claim hash
 	i.IssuedClaims[claim.ClaimSchemaHashHex] = signedClaim
 
 	return &signedClaim

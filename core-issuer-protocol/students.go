@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 )
@@ -18,11 +20,10 @@ type Student struct {
 	Token     string `json:"token"`
 }
 
-var idToStudentInfo map[string]Student
+var idToStudentInfo map[string]*Student
 
-// TO-DO: Add error handling
 func LoadStudentInfo() {
-	idToStudentInfo = make(map[string]Student)
+	idToStudentInfo = make(map[string]*Student)
 	var students []Student
 
 	content, err := ioutil.ReadFile("../data/students.json")
@@ -30,14 +31,26 @@ func LoadStudentInfo() {
 		log.Fatal("Error when opening file: ", err)
 	}
 
-	_ = json.Unmarshal(content, &students)
-
-	for _, student := range students {
-		idToStudentInfo[student.Token] = student
+	err = json.Unmarshal(content, &students)
+	if err != nil {
+		log.Fatal("Error in unmarshaling student json data: ", err)
 	}
 
+	for _, student := range students {
+		idToStudentInfo[student.Token] = &student
+	}
+
+	fmt.Printf("Successfully loaded %d students data\n", len(students))
 }
 
-func getStudentInfoByToken(token string) Student {
-	return idToStudentInfo[token]
+func getStudentInfoByToken(token string) (*Student, error) {
+	if idToStudentInfo == nil {
+		LoadStudentInfo()
+	}
+	if idToStudentInfo == nil {
+		return nil, errors.New("Failed to load student info")
+	} else if idToStudentInfo[token] == nil {
+		return nil, errors.New("Failed to find student associated with token")
+	}
+	return idToStudentInfo[token], nil
 }

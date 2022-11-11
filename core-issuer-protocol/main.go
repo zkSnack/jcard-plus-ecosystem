@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -29,10 +30,15 @@ func issueClaims(jhuIssuer *Issuer) gin.HandlerFunc {
 		var body IssueClaimsBody
 		c.BindJSON(&body)
 
-		ageClaimAPI := generateAgeClaim(body.Token, body.ID)
-		jhuIssuer.IssueClaim(*ageClaimAPI)
-		claims := jhuIssuer.GetIssuedClaims()
-		c.IndentedJSON(http.StatusOK, claims)
+		ageClaimAPI, err := generateAgeClaim(body.ID, body.Token)
+		if err != nil {
+			fmt.Println("Error when generating age claim: ", err)
+			c.JSON(http.StatusBadRequest, map[string]interface{}{"error": "Error occurred while generating age claim"})
+		} else {
+			jhuIssuer.IssueClaim(*ageClaimAPI)
+			claims := jhuIssuer.GetIssuedClaims()
+			c.IndentedJSON(http.StatusOK, claims)
+		}
 	}
 	return gin.HandlerFunc(fn)
 }
