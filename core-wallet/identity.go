@@ -164,7 +164,7 @@ func (identity *Identity) AddClaim(claim ClaimAPI, config *Config) error {
 		return errors.Wrap(err, "Error while adding the root of the Clt to the Rot")
 	}
 
-	claimToAdd := createIden3ClaimFromAPI(claim)
+	claimToAdd := CreateIden3ClaimFromAPI(claim)
 	hIndex, hValue, _ := claimToAdd.HiHv()
 
 	err = identity.Clt.Add(ctx, hIndex, hValue)

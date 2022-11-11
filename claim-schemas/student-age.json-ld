@@ -1,0 +1,23 @@
+{
+  "@context": [{
+    "@version": 1.1,
+    "@protected": true,
+    "id": "@id",
+    "type": "@type",
+    "AgeCredential": {
+      "@id": "https://github.com/saganshul/capstone/claim-schemas/student-age.json-ld#AgeCredential",
+      "@context": {
+        "@version": 1.1,
+        "@protected": true,
+        "id": "@id",
+        "type": "@type",
+        "jcard-plus-vocab": "https://github.com/saganshul/capstone/claim-schema-vocab/student-age.json",
+        "serialization": "https://github.com/iden3/claim-schema-vocab/blob/main/credentials/serialization.md#",
+        "birthDay": {
+            "@id": "jcard-plus-vocab:birthDay",
+            "@type": "serialization:IndexDataSlotA"
+        }
+      }
+    }
+  }]
+}
