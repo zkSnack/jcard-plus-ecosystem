@@ -1,4 +1,4 @@
-package walletsdk
+package walletSDK
 
 import (
 	"fmt"

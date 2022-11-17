@@ -1,14 +1,9 @@
-package walletsdk
+package walletSDK
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/iden3/go-circuits"
-	"github.com/iden3/go-iden3-auth/loaders"
-	"github.com/iden3/go-iden3-auth/pubsignals"
-	"github.com/iden3/go-rapidsnark/types"
-	"github.com/iden3/go-schema-processor/processor"
 	"io/ioutil"
 	"log"
 	"math/big"
@@ -16,6 +11,12 @@ import (
 	"os/exec"
 	"path"
 	"strings"
+
+	"github.com/iden3/go-circuits"
+	"github.com/iden3/go-iden3-auth/loaders"
+	"github.com/iden3/go-iden3-auth/pubsignals"
+	"github.com/iden3/go-rapidsnark/types"
+	"github.com/iden3/go-schema-processor/processor"
 
 	jsonSuite "github.com/iden3/go-schema-processor/json"
 	jsonldSuite "github.com/iden3/go-schema-processor/json-ld"

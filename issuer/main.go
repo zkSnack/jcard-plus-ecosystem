@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 	"zkSnacks/issuerSDK"
-	"zkSnacks/walletsdk"
+	"zkSnacks/walletSDK"
 
 	"github.com/gin-gonic/gin"
 )
@@ -44,9 +44,9 @@ func issueClaim(jhuIssuer *issuerSDK.Issuer) gin.HandlerFunc {
 	return gin.HandlerFunc(fn)
 }
 
-func getCurrentState(config *walletsdk.Config, identity *walletsdk.Identity) gin.HandlerFunc {
+func getCurrentState(config *walletSDK.Config, identity *walletSDK.Identity) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
-		state, err := walletsdk.GetCurrentState(config, identity.ID)
+		state, err := walletSDK.GetCurrentState(config, identity.ID)
 		if err != nil {
 			log.Println("Error when getting current State: ", err)
 			c.JSON(http.StatusBadRequest, map[string]interface{}{"error": "Error occurred getting IDS from Blockchain"})

@@ -14,12 +14,12 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 
-	"zkSnacks/walletsdk"
+	"zkSnacks/walletSDK"
 )
 
 func main() {
-	config, _ := walletsdk.GetConfig("../holder/config.yaml")
-	identity, _ := walletsdk.GetIdentity("../holder/account.json")
+	config, _ := walletSDK.GetConfig("../holder/config.yaml")
+	identity, _ := walletSDK.GetIdentity("../holder/account.json")
 
 	router := gin.Default()
 	router.POST("/api/v1/addClaim", addClaim(identity, config))
@@ -31,13 +31,13 @@ func main() {
 	router.Run("localhost:8080")
 }
 
-func readConfig(file string) (*walletsdk.Config, error) {
+func readConfig(file string) (*walletSDK.Config, error) {
 	yfile, err := ioutil.ReadFile(file)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to open the config file.")
 	}
 
-	config := new(walletsdk.Config)
+	config := new(walletSDK.Config)
 	err = yaml.Unmarshal(yfile, config)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to unmarshal the yaml file.")
@@ -45,16 +45,16 @@ func readConfig(file string) (*walletsdk.Config, error) {
 	return config, nil
 }
 
-func getAccount(identity *walletsdk.Identity) gin.HandlerFunc {
+func getAccount(identity *walletSDK.Identity) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		c.IndentedJSON(http.StatusOK, identity)
 	}
 	return gin.HandlerFunc(fn)
 }
 
-func getCurrentState(config *walletsdk.Config, identity *walletsdk.Identity) gin.HandlerFunc {
+func getCurrentState(config *walletSDK.Config, identity *walletSDK.Identity) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
-		state, err := walletsdk.GetCurrentState(config, identity.ID)
+		state, err := walletSDK.GetCurrentState(config, identity.ID)
 		if err != nil {
 			c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to get IDS from smart contract")
 		} else {
@@ -64,9 +64,9 @@ func getCurrentState(config *walletsdk.Config, identity *walletsdk.Identity) gin
 	return gin.HandlerFunc(fn)
 }
 
-func addClaim(identity *walletsdk.Identity, config *walletsdk.Config) gin.HandlerFunc {
+func addClaim(identity *walletSDK.Identity, config *walletSDK.Config) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
-		var newClaim walletsdk.ClaimAPI
+		var newClaim walletSDK.ClaimAPI
 
 		if err := c.BindJSON(&newClaim); err != nil {
 			c.IndentedJSON(http.StatusBadRequest, "Error while parsing claimAPI JSON object")
@@ -76,7 +76,7 @@ func addClaim(identity *walletsdk.Identity, config *walletsdk.Config) gin.Handle
 				log.Printf("Failed to create new claim. Err %s\n", err)
 				c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to create new claim")
 			}
-			err = walletsdk.DumpIdentity(identity)
+			err = walletSDK.DumpIdentity(identity)
 			if err != nil {
 				c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to update account file")
 			} else {
@@ -87,7 +87,7 @@ func addClaim(identity *walletsdk.Identity, config *walletsdk.Config) gin.Handle
 	return gin.HandlerFunc(fn)
 }
 
-func requestProof(identity *walletsdk.Identity, config *walletsdk.Config) gin.HandlerFunc {
+func requestProof(identity *walletSDK.Identity, config *walletSDK.Config) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		var request protocol.AuthorizationRequestMessage
 
@@ -106,7 +106,7 @@ func requestProof(identity *walletsdk.Identity, config *walletsdk.Config) gin.Ha
 	return gin.HandlerFunc(fn)
 }
 
-func sendRequestToIssuerToGetClaims(identity *walletsdk.Identity, config *walletsdk.Config) ([]circuits.Claim, error) {
+func sendRequestToIssuerToGetClaims(identity *walletSDK.Identity, config *walletSDK.Config) ([]circuits.Claim, error) {
 	postBody, _ := json.Marshal(map[string]string{
 		"id":    identity.ID.String(),
 		"token": "fe7d9c51-5dcf-46dd-8bbc-ae9a0b716ee3",
@@ -130,7 +130,7 @@ func sendRequestToIssuerToGetClaims(identity *walletsdk.Identity, config *wallet
 	return claims, nil
 }
 
-func getClaims(identity *walletsdk.Identity, config *walletsdk.Config) gin.HandlerFunc {
+func getClaims(identity *walletSDK.Identity, config *walletSDK.Config) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		claims, err := sendRequestToIssuerToGetClaims(identity, config)
 		if err != nil {
@@ -142,7 +142,7 @@ func getClaims(identity *walletsdk.Identity, config *walletsdk.Config) gin.Handl
 			log.Printf("Error while adding issued claim to the wallet. Err %s\n", err)
 			c.IndentedJSON(http.StatusInternalServerError, "Failed to add issued claim to the wallet")
 		} else {
-			err = walletsdk.DumpIdentity(identity)
+			err = walletSDK.DumpIdentity(identity)
 			if err != nil {
 				c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to update account file")
 			} else {
