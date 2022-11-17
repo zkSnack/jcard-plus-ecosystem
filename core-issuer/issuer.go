@@ -2,7 +2,10 @@ package issuerSDK
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io/ioutil"
+	"log"
 	"math/big"
 
 	circuits "github.com/iden3/go-circuits"
@@ -98,4 +101,47 @@ func (i *Issuer) IssueClaim(claim walletSDK.ClaimAPI) (*circuits.Claim, error) {
 
 func (i *Issuer) GetIssuedClaims(holderID string) []circuits.Claim {
 	return i.IssuedClaims[holderID]
+}
+
+// Duplicate code from holder. Didn't want to update HTTP endpoint for my needs
+// TO-DO: Use logic from holder package instead of this? Might move code to utils package?
+func readConfig(filename string) (*walletsdk.Config, error) {
+	yfile, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to open the config file.")
+	}
+
+	config := new(walletsdk.Config)
+	err = yaml.Unmarshal(yfile, config)
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to unmarshal the yaml file.")
+	}
+	return config, nil
+}
+
+// Duplicate code from holder.  Didn't want to update HTTP endpoint for my needs
+func generateAccount() (*walletsdk.Identity, error) {
+	if identity, err := walletsdk.NewIdentity(); err == nil {
+		err = dumpIdentity(identity)
+		if err != nil {
+			return nil, err
+		}
+		return identity, nil
+	} else {
+		return nil, errors.Wrap(err, "Failed to create new identity")
+	}
+}
+
+// Duplicate code from holder.  Didn't want to update HTTP endpoint for my needs
+func dumpIdentity(identity *walletsdk.Identity) error {
+	file, err := json.MarshalIndent(identity, "", "	")
+	if err != nil {
+		return errors.Wrap(err, "Failed to json MarshalIdent identity struct")
+	}
+	err = ioutil.WriteFile("account.json", file, 0644)
+	if err != nil {
+		return errors.Wrap(err, "Failed to write identity state to the file")
+	}
+	log.Println("Account.json updated to latest identity state")
+	return nil
 }
