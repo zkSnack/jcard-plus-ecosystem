@@ -2,7 +2,7 @@ package issuerSDK
 
 import (
 	"context"
-	"log"
+	"errors"
 	"math/big"
 
 	circuits "github.com/iden3/go-circuits"
@@ -12,9 +12,9 @@ import (
 )
 
 type Issuer struct {
-	Config       *walletSDK.Config         `json:"config"`
-	Identity     *walletSDK.Identity       `json:"identity"`
-	IssuedClaims map[string]circuits.Claim `json:"issued_claims"`
+	Config       *walletSDK.Config           `json:"config"`
+	Identity     *walletSDK.Identity         `json:"identity"`
+	IssuedClaims map[string][]circuits.Claim `json:"issued_claims"`
 }
 
 const (
@@ -34,33 +34,35 @@ func NewIssuer() *Issuer {
 	return &issuer
 }
 
-func (i *Issuer) IssueClaim(claim walletSDK.ClaimAPI) *circuits.Claim {
+func (i *Issuer) IssueClaim(claim walletSDK.ClaimAPI) (*circuits.Claim, error) {
 	// Get core claim from Claim API
 	claimToAdd := walletSDK.CreateIden3ClaimFromAPI(claim)
 	err := i.Identity.AddClaim(claim, i.Config)
-	if err != nil {
-		log.Fatalf("Error %s. Failed to add claim. Aborting...", err)
+	if err == nil {
+		return nil, errors.New("Error: fail to add claim")
 	}
+
 	err = walletSDK.DumpIdentity(i.Identity)
 	if err != nil {
-		log.Fatalf("Error %s. Failed to dump File. Aborting...", err)
+		return nil, errors.New("Error: fail to dump file")
 	}
+
 	hIndexClaim, hValueClaim, _ := claimToAdd.HiHv()
 	claimHash, err := merkletree.HashElems(hIndexClaim, hValueClaim)
 	if err != nil {
-		log.Fatalf("Error %s. Failed to hash claim. Aborting...", err)
+		return nil, errors.New("Error: fail to hash claim")
 	}
 
 	// Generate proof of claim
 	claimProof, _, err := i.Identity.Clt.GenerateProof(context.Background(), hIndexClaim, i.Identity.Clt.Root())
 	if err != nil {
-		log.Fatalf("Error %s. Failed to generate MTP for claim. Aborting...", err)
+		return nil, errors.New("Error: fail to generate MTP for claim")
 	}
 
 	claimRevNonce := new(big.Int).SetUint64(claimToAdd.GetRevocationNonce())
 	proofNotRevoke, _, err := i.Identity.Ret.GenerateProof(context.Background(), claimRevNonce, i.Identity.Ret.Root())
 	if err != nil {
-		log.Fatalf("Error %s. Failed to generate revocation MTP for claim. Aborting...", err)
+		return nil, errors.New("Error: to generate revocation MTP for claim")
 	}
 
 	// Sign claim
@@ -91,18 +93,22 @@ func (i *Issuer) IssueClaim(claim walletSDK.ClaimAPI) *circuits.Claim {
 		SignatureProof: claimIssuerSignature,
 	}
 
-	// Use better key than claim hash
-	i.IssuedClaims[claim.ClaimSchemaHashHex] = signedClaim
+	i.assignClaim(claim.SubjectID, signedClaim)
 
-	return &signedClaim
+	return &signedClaim, nil
 }
 
-// Returns all the claims
+func (i *Issuer) assignClaim(holderID string, claim *circuits.Claim) {
+	i.IssuedClaims[holderID] = append(i.IssuedClaims[holderID], claim)
+}
+
+// Returns all the claims of an identity
 // TO-DO: Only return claims associated with particular holder
-func (i *Issuer) GetIssuedClaims() []circuits.Claim {
-	var claims []circuits.Claim
-	for _, claim := range i.IssuedClaims {
-		claims = append(claims, claim)
-	}
-	return claims
+func (i *Issuer) GetIssuedClaims(holderID string) []circuits.Claim {
+	// var claims []circuits.Claim
+	// for _, claim := range i.IssuedClaims {
+	// 	claims = append(claims, claim)
+	// }
+
+	return i.IssuedClaims[holderID]
 }
