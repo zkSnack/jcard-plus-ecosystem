@@ -8,7 +8,7 @@ require (
 	github.com/iden3/iden3comm v0.1.2
 	github.com/pkg/errors v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
-	zkSnacks/walletsdk v0.0.0-00010101000000-000000000000
+	zkSnacks/walletSDK v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -85,4 +85,4 @@ require (
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 )
 
-replace zkSnacks/walletsdk => ../core-wallet
+replace zkSnacks/walletSDK => ../core-wallet

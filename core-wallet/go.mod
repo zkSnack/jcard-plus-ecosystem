@@ -1,4 +1,4 @@
-module zkSnacks/walletsdk
+module zkSnacks/walletSDK
 
 go 1.18
 

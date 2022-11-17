@@ -8,7 +8,7 @@ import (
 	"math/big"
 	"time"
 	"zkSnacks/issuerSDK"
-	"zkSnacks/walletsdk"
+	"zkSnacks/walletSDK"
 )
 
 type Student struct {
@@ -58,19 +58,19 @@ func getStudentInfoBy(token string) (*Student, error) {
 	return idToStudentInfo[token], nil
 }
 
-func generateAgeClaim(holderID string, token string) (*walletsdk.ClaimAPI, error) {
+func generateAgeClaim(holderID string, token string) (*walletSDK.ClaimAPI, error) {
 
 	studentInfo, err := getStudentInfoBy(token)
 	if err != nil {
 		return nil, err
 	}
 
-	claimSchemaHashHex := walletsdk.GetHashFromClaimSchema(issuerSDK.CLAIM_SCHEMA_ROOT_DIR+"student-age.json-ld", "AgeCredential")
+	claimSchemaHashHex := walletSDK.GetHashFromClaimSchema(issuerSDK.CLAIM_SCHEMA_ROOT_DIR+"student-age.json-ld", "AgeCredential")
 
 	birthday := new(big.Int)
 	birthday.SetString(studentInfo.BirthDate, 10)
 
-	claimAPI := walletsdk.ClaimAPI{
+	claimAPI := walletSDK.ClaimAPI{
 		SubjectID:          holderID,
 		ClaimSchemaHashHex: claimSchemaHashHex,
 		IndexSlotA:         birthday,

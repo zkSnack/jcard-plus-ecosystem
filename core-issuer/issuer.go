@@ -8,12 +8,12 @@ import (
 	circuits "github.com/iden3/go-circuits"
 	merkletree "github.com/iden3/go-merkletree-sql/v2"
 
-	"zkSnacks/walletsdk"
+	"zkSnacks/walletSDK"
 )
 
 type Issuer struct {
-	Config       *walletsdk.Config         `json:"config"`
-	Identity     *walletsdk.Identity       `json:"identity"`
+	Config       *walletSDK.Config         `json:"config"`
+	Identity     *walletSDK.Identity       `json:"identity"`
 	IssuedClaims map[string]circuits.Claim `json:"issued_claims"`
 }
 
@@ -22,8 +22,8 @@ const (
 )
 
 func NewIssuer() *Issuer {
-	config, _ := walletsdk.GetConfig("../holder/config.yaml")
-	identity, _ := walletsdk.GetIdentity("../issuer/account.json")
+	config, _ := walletSDK.GetConfig("../holder/config.yaml")
+	identity, _ := walletSDK.GetIdentity("../issuer/account.json")
 
 	issuer := Issuer{
 		Identity:     identity,
@@ -34,14 +34,14 @@ func NewIssuer() *Issuer {
 	return &issuer
 }
 
-func (i *Issuer) IssueClaim(claim walletsdk.ClaimAPI) *circuits.Claim {
+func (i *Issuer) IssueClaim(claim walletSDK.ClaimAPI) *circuits.Claim {
 	// Get core claim from Claim API
-	claimToAdd := walletsdk.CreateIden3ClaimFromAPI(claim)
+	claimToAdd := walletSDK.CreateIden3ClaimFromAPI(claim)
 	err := i.Identity.AddClaim(claim, i.Config)
 	if err != nil {
 		log.Fatalf("Error %s. Failed to add claim. Aborting...", err)
 	}
-	err = walletsdk.DumpIdentity(i.Identity)
+	err = walletSDK.DumpIdentity(i.Identity)
 	if err != nil {
 		log.Fatalf("Error %s. Failed to dump File. Aborting...", err)
 	}

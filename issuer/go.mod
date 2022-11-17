@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/gin-gonic/gin v1.8.1
 	zkSnacks/issuerSDK v0.0.0-00010101000000-000000000000
-	zkSnacks/walletsdk v0.0.0-00010101000000-000000000000
+	zkSnacks/walletSDK v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -86,6 +86,6 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
-replace zkSnacks/walletsdk => ../core-wallet
+replace zkSnacks/walletSDK => ../core-wallet
 
 replace zkSnacks/issuerSDK => ../core-issuer
