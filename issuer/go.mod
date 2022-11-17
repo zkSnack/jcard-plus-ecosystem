@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/gin-gonic/gin v1.8.1
+	zkSnacks/issuerSDK v0.0.0-00010101000000-000000000000
 	zkSnacks/walletsdk v0.0.0-00010101000000-000000000000
 )
 
@@ -83,7 +84,6 @@ require (
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	zkSnacks/issuerSDK v0.0.0-00010101000000-000000000000 // indirect
 )
 
 replace zkSnacks/walletsdk => ../core-wallet
