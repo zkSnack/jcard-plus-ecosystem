@@ -4,37 +4,22 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/iden3/go-circuits"
 	"github.com/iden3/iden3comm/protocol"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"os"
 
 	"zkSnacks/walletsdk"
 )
 
 func main() {
-	config, err := readConfig("config.yaml")
-	if err != nil {
-		log.Fatalf("Failed while loading config file. Error %s", err)
-	}
-	var identity *walletsdk.Identity
-	if _, err := os.Stat("./account.json"); err == nil {
-		identity, err = walletsdk.LoadIdentityFromFile("./account.json")
-		if err != nil {
-			log.Fatalf("Failed to load identity from the File. Err %s", err)
-		}
-		log.Println("Account loaded from saved file: account.json")
-	} else {
-		identity, err = generateAccount()
-		if err != nil {
-			log.Fatalf("Error %s. Failed to create new identity. Aborting...", err)
-		}
-	}
+	config, _ := walletsdk.GetConfig("../holder/config.yaml")
+	identity, _ := walletsdk.GetIdentity("../holder/account.json")
 
 	router := gin.Default()
 	router.POST("/api/v1/addClaim", addClaim(identity, config))
@@ -58,18 +43,6 @@ func readConfig(file string) (*walletsdk.Config, error) {
 		return nil, errors.Wrap(err, "Failed to unmarshal the yaml file.")
 	}
 	return config, nil
-}
-
-func generateAccount() (*walletsdk.Identity, error) {
-	if identity, err := walletsdk.NewIdentity(); err == nil {
-		err = dumpIdentity(identity)
-		if err != nil {
-			return nil, err
-		}
-		return identity, nil
-	} else {
-		return nil, errors.Wrap(err, "Failed to create new identity")
-	}
 }
 
 func getAccount(identity *walletsdk.Identity) gin.HandlerFunc {
@@ -103,7 +76,7 @@ func addClaim(identity *walletsdk.Identity, config *walletsdk.Config) gin.Handle
 				log.Printf("Failed to create new claim. Err %s\n", err)
 				c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to create new claim")
 			}
-			err = dumpIdentity(identity)
+			err = walletsdk.DumpIdentity(identity)
 			if err != nil {
 				c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to update account file")
 			} else {
@@ -169,7 +142,7 @@ func getClaims(identity *walletsdk.Identity, config *walletsdk.Config) gin.Handl
 			log.Printf("Error while adding issued claim to the wallet. Err %s\n", err)
 			c.IndentedJSON(http.StatusInternalServerError, "Failed to add issued claim to the wallet")
 		} else {
-			err = dumpIdentity(identity)
+			err = walletsdk.DumpIdentity(identity)
 			if err != nil {
 				c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to update account file")
 			} else {
@@ -178,17 +151,4 @@ func getClaims(identity *walletsdk.Identity, config *walletsdk.Config) gin.Handl
 		}
 	}
 	return gin.HandlerFunc(fn)
-}
-
-func dumpIdentity(identity *walletsdk.Identity) error {
-	file, err := json.MarshalIndent(identity, "", "	")
-	if err != nil {
-		return errors.Wrap(err, "Failed to json MarshalIdent identity struct")
-	}
-	err = ioutil.WriteFile("account.json", file, 0644)
-	if err != nil {
-		return errors.Wrap(err, "Failed to write identity state to the file")
-	}
-	log.Println("Account.json updated to latest identity state")
-	return nil
 }
