@@ -102,13 +102,6 @@ func (i *Issuer) assignClaim(holderID string, claim *circuits.Claim) {
 	i.IssuedClaims[holderID] = append(i.IssuedClaims[holderID], claim)
 }
 
-// Returns all the claims of an identity
-// TO-DO: Only return claims associated with particular holder
 func (i *Issuer) GetIssuedClaims(holderID string) []circuits.Claim {
-	// var claims []circuits.Claim
-	// for _, claim := range i.IssuedClaims {
-	// 	claims = append(claims, claim)
-	// }
-
 	return i.IssuedClaims[holderID]
 }
