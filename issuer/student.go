@@ -59,7 +59,6 @@ func getStudentInfoBy(token string) (*Student, error) {
 }
 
 func generateAgeClaim(holderID string, token string) (*walletSDK.ClaimAPI, error) {
-
 	studentInfo, err := getStudentInfoBy(token)
 	if err != nil {
 		return nil, err

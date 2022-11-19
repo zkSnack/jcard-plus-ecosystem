@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"zkSnacks/issuerSDK"
 	"zkSnacks/walletSDK"
@@ -33,10 +32,13 @@ func issueClaim(jhuIssuer *issuerSDK.Issuer) gin.HandlerFunc {
 
 		ageClaimAPI, err := generateAgeClaim(body.ID, body.Token)
 		if err != nil {
-			log.Println("Error when generating age claim: ", err)
-			c.JSON(http.StatusBadRequest, map[string]interface{}{"error": "Error occurred while generating age claim"})
+			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		} else {
-			jhuIssuer.IssueClaim(*ageClaimAPI)
+			_, err := jhuIssuer.IssueClaim(*ageClaimAPI)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+			}
+
 			claims := jhuIssuer.GetIssuedClaims(ageClaimAPI.SubjectID)
 			c.IndentedJSON(http.StatusOK, claims)
 		}
@@ -48,8 +50,7 @@ func getCurrentState(config *walletSDK.Config, identity *walletSDK.Identity) gin
 	fn := func(c *gin.Context) {
 		state, err := walletSDK.GetCurrentState(config, identity.ID)
 		if err != nil {
-			log.Println("Error when getting current State: ", err)
-			c.JSON(http.StatusBadRequest, map[string]interface{}{"error": "Error occurred getting IDS from Blockchain"})
+			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		} else {
 			c.IndentedJSON(http.StatusOK, state)
 		}
