@@ -2,13 +2,14 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"io/ioutil"
 	"log"
 	"math/big"
 	"time"
 	"zkSnacks/issuerSDK"
 	"zkSnacks/walletSDK"
+
+	"github.com/pkg/errors"
 )
 
 type Student struct {
@@ -23,43 +24,44 @@ type Student struct {
 	Token     string `json:"token"`
 }
 
-var idToStudentInfo map[string]*Student
+var idToStudentInfo map[string]Student
 
-func loadStudentInfo() {
-	idToStudentInfo = make(map[string]*Student)
-	var students []Student
-
+func loadStudentInfo() error {
+	// Read database
 	content, err := ioutil.ReadFile("../data/students.json")
 	if err != nil {
-		log.Fatal("Error when opening file: ", err)
+		return err
 	}
 
+	// Serialize data
+	var students []Student
 	err = json.Unmarshal(content, &students)
 	if err != nil {
-		log.Fatal("Error in unmarshaling student json data: ", err)
+		return err
 	}
 
+	// Init data store
+	idToStudentInfo = make(map[string]Student)
 	for _, student := range students {
-		idToStudentInfo[student.Token] = &student
+		idToStudentInfo[student.Token] = student
 	}
 
 	log.Printf("Successfully loaded %d students data\n", len(students))
+	return nil
 }
 
-func getStudentInfoBy(token string) (*Student, error) {
+func getStudentInfoByToken(token string) (*Student, error) {
 	if idToStudentInfo == nil {
 		loadStudentInfo()
 	}
-	if idToStudentInfo == nil {
-		return nil, errors.New("Failed to load student info")
-	} else if idToStudentInfo[token] == nil {
-		return nil, errors.New("Failed to find student associated with token")
+	if val, ok := idToStudentInfo[token]; ok {
+		return &val, nil
 	}
-	return idToStudentInfo[token], nil
+	return nil, errors.New("Fail to find student associated with token")
 }
 
 func generateAgeClaim(holderID string, token string) (*walletSDK.ClaimAPI, error) {
-	studentInfo, err := getStudentInfoBy(token)
+	studentInfo, err := getStudentInfoByToken(token)
 	if err != nil {
 		return nil, err
 	}

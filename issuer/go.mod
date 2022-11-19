@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/gin-gonic/gin v1.8.1
+	github.com/pkg/errors v0.9.1
 	zkSnacks/issuerSDK v0.0.0-00010101000000-000000000000
 	zkSnacks/walletSDK v0.0.0-00010101000000-000000000000
 )
@@ -64,7 +65,6 @@ require (
 	github.com/multiformats/go-multihash v0.0.14 // indirect
 	github.com/multiformats/go-varint v0.0.6 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.1 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/qri-io/jsonpointer v0.1.1 // indirect
 	github.com/qri-io/jsonschema v0.2.1 // indirect
 	github.com/rjeczalik/notify v0.9.1 // indirect
