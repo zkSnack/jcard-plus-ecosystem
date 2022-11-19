@@ -104,7 +104,7 @@ func LoadIdentityFromFile(file string) (*Identity, error) {
 
 	err = json.Unmarshal(content, identity)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error during Unmarshal of identity file")
+		return nil, errors.Wrap(err, "Error during Unmarshal of identity file.")
 	}
 
 	ctx := context.Background()
@@ -138,12 +138,12 @@ func LoadIdentityFromFile(file string) (*Identity, error) {
 		hIndex, hValue, _ := claim.HiHv()
 		err = identity.Clt.Add(ctx, hIndex, hValue)
 		if err != nil {
-			return nil, errors.Wrap(err, "Failed while adding claims to the Clt from JSON File")
+			return nil, errors.Wrap(err, "Failed while adding claims to the Clt from JSON File.")
 		}
 	}
 
 	if identity.GetIDS().String() != identity.IDS.String() {
-		return nil, errors.Errorf("IDS differs while recreating it from json file. Generated IDS is %s but in file it is %s", identity.GetIDS().String(), identity.IDS.String())
+		return nil, errors.Errorf("IDS differs while recreating it from json file. Generated IDS is %s but in file it is %s.", identity.GetIDS().String(), identity.IDS.String())
 	}
 	return identity, nil
 }
@@ -168,7 +168,7 @@ func (identity *Identity) AddClaim(claim ClaimAPI, config *Config) error {
 	// Before updating the claims tree, add the claims tree root at Genesis state to the Roots tree.
 	err := identity.Rot.Add(ctx, identity.Clt.Root().BigInt(), big.NewInt(0))
 	if err != nil {
-		return errors.Wrap(err, "Error while adding the root of the Clt to the Rot")
+		return errors.Wrap(err, "Error while adding the root of the Clt to the Rot.")
 	}
 
 	claimToAdd := CreateIden3ClaimFromAPI(claim)
@@ -176,7 +176,7 @@ func (identity *Identity) AddClaim(claim ClaimAPI, config *Config) error {
 
 	err = identity.Clt.Add(ctx, hIndex, hValue)
 	if err != nil {
-		return errors.Wrap(err, "Error while adding the new claim to Clt")
+		return errors.Wrap(err, "Error while adding the new claim to Clt.")
 	}
 	// Add the claim to our array
 	identity.Claims = append(identity.Claims, claimToAdd)
@@ -210,13 +210,13 @@ func (identity *Identity) AddClaim(claim ClaimAPI, config *Config) error {
 	inputBytes, _ := stateTransitionInputs.InputsMarshal()
 	proof, err := GenerateZkProof(config.Circuits.Path+"stateTransition", toJSON(inputBytes), config)
 	if err != nil {
-		return errors.Wrap(err, "Error while creating proof using snarkJS")
+		return errors.Wrap(err, "Error while creating proof using snarkJS.")
 	}
 	transaction, err := TransitState(config, identity.ID, proof)
 	if err != nil {
-		return errors.Wrap(err, "Errored while submitting transaction to blockchain")
+		return errors.Wrap(err, "Errored while submitting transaction to blockchain.")
 	}
-	log.Printf("Add Claim successful. Submitted to change state on blockchain with txID: %s\n", transaction.Hash().String())
+	log.Printf("Add Claim successful. Submitted to change state on blockchain with txID: %s.\n", transaction.Hash().String())
 	return nil
 }
 
@@ -233,11 +233,11 @@ func (identity *Identity) ProofRequest(request protocol.AuthorizationRequestMess
 	rules := request.Body.Scope[0].Rules
 	jsonStr, err := json.Marshal(rules["query"])
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to convert query into jsonStr")
+		return nil, errors.Wrap(err, "Failed to convert query into jsonStr.")
 	}
 	var query pubsignals.Query
 	if err := json.Unmarshal(jsonStr, &query); err != nil {
-		return nil, errors.Wrap(err, "Failed to typecast rule to pubsignals.Query")
+		return nil, errors.Wrap(err, "Failed to typecast rule to pubsignals.Query.")
 	}
 	parsedQuery, _ := ValidateAndGetCircuitsQuery(query, context.Background(), loaders.DefaultSchemaLoader{IpfsURL: ""})
 
@@ -258,11 +258,11 @@ func (identity *Identity) ProofRequest(request protocol.AuthorizationRequestMess
 		}
 		inputBytes, err := atomicInputs.InputsMarshal()
 		if err != nil {
-			return nil, errors.Wrapf(err, "Error during marshalling of %s circuit inputs", circuitName)
+			return nil, errors.Wrapf(err, "Error during marshalling of %s circuit inputs.", circuitName)
 		}
 		proof, err := GenerateZkProof(config.Circuits.Path+"credentialAtomicQuerySig", toJSON(inputBytes), config)
 		if err != nil {
-			return nil, errors.Wrap(err, "Error while generating proof using snarkJS")
+			return nil, errors.Wrap(err, "Error while generating proof using snarkJS.")
 		}
 		resp := protocol.AuthorizationResponseMessage{
 			ID:       request.ID,
@@ -333,7 +333,7 @@ func (identity *Identity) GetUserAuthClaim() circuits.Claim {
 func (identity *Identity) IsAtGenesisState() (bool, error) {
 	ans, err := checkGenesisStateID(identity.ID.BigInt(), identity.IDS.BigInt())
 	if err != nil {
-		return false, errors.Wrap(err, "Failed to check if state is genesis")
+		return false, errors.Wrap(err, "Failed to check if state is genesis.")
 	}
 	return ans, nil
 }
