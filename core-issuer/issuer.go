@@ -17,17 +17,13 @@ type Issuer struct {
 	IssuedClaims map[string][]circuits.Claim `json:"issued_claims"`
 }
 
-const (
-	CLAIM_SCHEMA_ROOT_DIR = "../claim-schemas/"
-)
-
 func NewIssuer() *Issuer {
 	config, _ := walletSDK.GetConfig("../issuer/config.yaml")
 	identity, _ := walletSDK.GetIdentity("../issuer/account.json")
 
 	issuer := Issuer{
-		Identity:     identity,
 		Config:       config,
+		Identity:     identity,
 		IssuedClaims: make(map[string][]circuits.Claim),
 	}
 

@@ -6,7 +6,6 @@ import (
 	"log"
 	"math/big"
 	"time"
-	"zkSnacks/issuerSDK"
 	"zkSnacks/walletSDK"
 
 	"github.com/pkg/errors"
@@ -57,16 +56,16 @@ func getStudentInfoByToken(token string) (*Student, error) {
 	if val, ok := idToStudentInfo[token]; ok {
 		return &val, nil
 	}
-	return nil, errors.New("Fail to find student associated with token")
+	return nil, errors.New("Failed to find student associated with token.")
 }
 
-func generateAgeClaim(holderID string, token string) (*walletSDK.ClaimAPI, error) {
+func generateAgeClaim(config *walletSDK.Config, holderID string, token string) (*walletSDK.ClaimAPI, error) {
 	studentInfo, err := getStudentInfoByToken(token)
 	if err != nil {
 		return nil, err
 	}
 
-	claimSchemaHashHex := walletSDK.GetHashFromClaimSchema(issuerSDK.CLAIM_SCHEMA_ROOT_DIR+"student-age.json-ld", "AgeCredential")
+	claimSchemaHashHex := walletSDK.GetHashFromClaimSchema(config.Issuer.ClaimSchemaRoot+"student-age.json-ld", "AgeCredential")
 
 	birthday := new(big.Int)
 	birthday.SetString(studentInfo.BirthDate, 10)

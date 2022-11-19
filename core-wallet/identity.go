@@ -36,8 +36,9 @@ type Identity struct {
 
 type Config struct {
 	Issuer struct {
-		URL string `yaml:"url"`
-		ID  string `yaml:"id"`
+		URL             string `yaml:"url"`
+		ID              string `yaml:"id"`
+		ClaimSchemaRoot string `yaml:"claimSchemaRoot"`
 	} `yaml:"issuer"`
 	Circuits struct {
 		Path string `yaml:"path"`

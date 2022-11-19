@@ -30,7 +30,7 @@ func issueClaim(jhuIssuer *issuerSDK.Issuer) gin.HandlerFunc {
 		var body IssueClaimsBody
 		c.BindJSON(&body)
 
-		ageClaimAPI, err := generateAgeClaim(body.ID, body.Token)
+		ageClaimAPI, err := generateAgeClaim(jhuIssuer.Config, body.ID, body.Token)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		} else {

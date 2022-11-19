@@ -1,6 +1,7 @@
 issuer:
   url: http://localhost:8090
   id: 118VZmZxJs1cZzzTcBsnbi77Pu6EnXqcpQRXG7UA2W
+  claimSchemaRoot: ../claim-schemas/
 
 circuits:
   path: ../static/compiled-circuits/
@@ -11,24 +12,3 @@ web3:
   url: "https://polygon-testnet.public.blastapi.io"
   chainID: 80001
   privateKey: "<PRIVATE_KEY>"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
