@@ -12,7 +12,6 @@ import (
 	"github.com/iden3/go-circuits"
 	"github.com/iden3/iden3comm/protocol"
 	"github.com/pkg/errors"
-	"gopkg.in/yaml.v2"
 
 	"zkSnacks/walletSDK"
 )
@@ -29,20 +28,6 @@ func main() {
 	router.GET("/api/v1/getCurrentState", getCurrentState(config, identity))
 
 	router.Run("localhost:8080")
-}
-
-func readConfig(file string) (*walletSDK.Config, error) {
-	yfile, err := ioutil.ReadFile(file)
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to open the config file.")
-	}
-
-	config := new(walletSDK.Config)
-	err = yaml.Unmarshal(yfile, config)
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to unmarshal the yaml file.")
-	}
-	return config, nil
 }
 
 func getAccount(identity *walletSDK.Identity) gin.HandlerFunc {

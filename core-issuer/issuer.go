@@ -22,7 +22,7 @@ const (
 )
 
 func NewIssuer() *Issuer {
-	config, _ := walletSDK.GetConfig("../holder/config.yaml")
+	config, _ := walletSDK.GetConfig("../issuer/config.yaml")
 	identity, _ := walletSDK.GetIdentity("../issuer/account.json")
 
 	issuer := Issuer{
