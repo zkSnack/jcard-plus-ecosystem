@@ -37,7 +37,7 @@ func issueClaim(jhuIssuer *issuerSDK.Issuer) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, map[string]interface{}{"error": "Error occurred while generating age claim"})
 		} else {
 			jhuIssuer.IssueClaim(*ageClaimAPI)
-			claims := jhuIssuer.GetIssuedClaims()
+			claims := jhuIssuer.GetIssuedClaims(ageClaimAPI.SubjectID)
 			c.IndentedJSON(http.StatusOK, claims)
 		}
 	}
