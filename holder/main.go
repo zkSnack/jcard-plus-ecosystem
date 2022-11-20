@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	core "github.com/iden3/go-iden3-core"
 	"github.com/iden3/iden3comm/protocol"
@@ -36,6 +37,9 @@ func main() {
 	identity, _ := walletSDK.GetIdentity("./account.json")
 
 	router := gin.Default()
+	corsConfig := cors.DefaultConfig()
+	corsConfig.AllowOrigins = []string{"http://localhost:3000"}
+	router.Use(cors.New(corsConfig)) // TODO: Remove this in production and allow only specific domains
 	router.POST("/api/v1/addClaim", addClaim(identity, config))
 	router.POST("/api/v1/requestProof", requestProof(identity, config))
 	router.POST("/api/v1/fetchClaimsFromIssuer", fetchClaimsFromIssuer(identity, config)) // Why this endpoint is POST?
@@ -177,7 +181,10 @@ func convertIden3CredClaimBodyToResponse(claims []walletSDK.Iden3CredentialClaim
 func getClaims(identity *walletSDK.Identity, config *walletSDK.Config) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		receivedClaims := convertIden3CredClaimBodyToResponse(identity.GetStoredClaims())
-		c.IndentedJSON(http.StatusOK, receivedClaims)
+		responseData := map[string]interface{}{
+			"claims": receivedClaims,
+		}
+		c.IndentedJSON(http.StatusOK, responseData)
 	}
 	return gin.HandlerFunc(fn)
 }
