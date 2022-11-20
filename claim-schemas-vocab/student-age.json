@@ -4,7 +4,7 @@
     "title": "Vocabulary for Iden3 Credential specific type in a json Format",
     "type": "DateOfBirth",
     "properties": {   
-        "BirthDay": {
+        "birthDay": {
             "display": "BirthDay",
             "description": "Student Date of Birth",
             "type": "number",

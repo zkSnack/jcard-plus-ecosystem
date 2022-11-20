@@ -2,11 +2,19 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"math/big"
+	"math/rand"
+	"strconv"
 	"time"
 	"zkSnacks/walletSDK"
+
+	core "github.com/iden3/go-iden3-core"
+
+	"github.com/gofrs/uuid"
+	verifiable "github.com/iden3/go-schema-processor/verifiable"
 
 	"github.com/pkg/errors"
 )
@@ -21,6 +29,11 @@ type Student struct {
 	Degree    string `json:"degree"`
 	Program   string `json:"program"`
 	Token     string `json:"token"`
+}
+
+type CredentialSchema struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
 }
 
 var idToStudentInfo map[string]Student
@@ -65,17 +78,60 @@ func generateAgeClaim(config *walletSDK.Config, holderID string, token string) (
 		return nil, err
 	}
 
-	claimSchemaHashHex := walletSDK.GetHashFromClaimSchema(config.Issuer.ClaimSchemaRoot+"student-age.json-ld", "AgeCredential")
-
 	birthday := new(big.Int)
 	birthday.SetString(studentInfo.BirthDate, 10)
 
 	claimAPI := walletSDK.ClaimAPI{
-		SubjectID:          holderID,
-		ClaimSchemaHashHex: claimSchemaHashHex,
-		IndexSlotA:         birthday,
-		ExpirationDate:     time.Now().Unix() + 31536000,
+		SubjectID:      holderID,
+		ClaimSchema:    "https://raw.githubusercontent.com/pratik1998/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld",
+		CredentialType: "AgeCredential",
+		IndexSlotA:     birthday,
+		ExpirationDate: time.Now().Unix() + 31536000,
 	}
 
 	return &claimAPI, nil
+}
+
+func generateAgeClaimV2(config *walletSDK.Config, holderID string, token string) (*verifiable.Iden3Credential, error) {
+	id, err := core.IDFromString(holderID)
+	if err != nil {
+		fmt.Println("Error: ", err)
+		return nil, err
+	}
+	did, err := core.NewDID(id.String(), core.WithNetwork("polygon", "mumbai"))
+	if err != nil {
+		return nil, err
+	}
+	fmt.Print("DID: ", did.String())
+	studentInfo, err := getStudentInfoByToken(token)
+	if err != nil {
+		return nil, err
+	}
+	iden3credentialAPI := verifiable.Iden3Credential{}
+	iden3credentialAPI.ID = uuid.Must(uuid.NewV4()).String()
+	iden3credentialAPI.Context = []string{
+		"https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/iden3credential.json-ld",
+		"https://raw.githubusercontent.com/pratik1998/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld",
+	}
+	iden3credentialAPI.Type = []string{
+		"Iden3Credential",
+	}
+	expiration_date := time.Unix(time.Now().Unix()+31536000, 0)
+	iden3credentialAPI.Expiration = &expiration_date
+	iden3credentialAPI.Updatable = false
+	iden3credentialAPI.Version = 1
+	iden3credentialAPI.RevNonce = rand.Uint64()
+	iden3credentialAPI.CredentialSubject = map[string]interface{}{
+		"birthDay": studentInfo.BirthDate,
+		"id":       holderID,
+		"type":     "AgeCredential",
+	}
+	iden3credentialAPI.CredentialStatus = &verifiable.CredentialStatus{
+		ID:   "http://localhost:8080/api/v1/claims/revocation/status/" + strconv.Itoa(int(iden3credentialAPI.RevNonce)),
+		Type: "SparseMerkleTreeProof", // Should be using constants but too lazy do work now
+	}
+	iden3credentialAPI.CredentialSchema.ID = "https://raw.githubusercontent.com/pratik1998/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld"
+	iden3credentialAPI.CredentialSchema.Type = "AgeCredential"
+
+	return &iden3credentialAPI, nil
 }

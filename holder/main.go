@@ -7,14 +7,29 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/iden3/go-circuits"
+	core "github.com/iden3/go-iden3-core"
 	"github.com/iden3/iden3comm/protocol"
 	"github.com/pkg/errors"
 
 	"zkSnacks/walletSDK"
 )
+
+type ClaimResponseBody struct {
+	ID               string                 `json:"id"`
+	SchemaURL        string                 `json:"schemaURL"`
+	CredentialType   string                 `json:"credentialType"`
+	Expiration       *time.Time             `json:"expiration"`
+	Updatable        bool                   `json:"updatable"`
+	Version          uint32                 `json:"version"`
+	RevocationNonce  uint64                 `json:"revocationNonce"`
+	RevocationStatus bool                   `json:"revocationStatus"`
+	IssuerID         string                 `json:"issuerID"`
+	ClaimData        map[string]interface{} `json:"claimData"`
+	ClaimRawData     *core.Claim            `json:"claimRawData"`
+}
 
 func main() {
 	config, _ := walletSDK.GetConfig("./config.yaml")
@@ -23,7 +38,8 @@ func main() {
 	router := gin.Default()
 	router.POST("/api/v1/addClaim", addClaim(identity, config))
 	router.POST("/api/v1/requestProof", requestProof(identity, config))
-	router.POST("/api/v1/getClaims", getClaims(identity, config))
+	router.POST("/api/v1/fetchClaimsFromIssuer", fetchClaimsFromIssuer(identity, config)) // Why this endpoint is POST?
+	router.GET("/api/v1/getClaims", getClaims(identity, config))
 	router.GET("/api/v1/getAccount", getAccount(identity))
 	router.GET("/api/v1/getCurrentState", getCurrentState(config, identity))
 
@@ -91,7 +107,7 @@ func requestProof(identity *walletSDK.Identity, config *walletSDK.Config) gin.Ha
 	return gin.HandlerFunc(fn)
 }
 
-func sendRequestToIssuerToGetClaims(identity *walletSDK.Identity, config *walletSDK.Config) ([]circuits.Claim, error) {
+func sendRequestToIssuerToGetClaims(identity *walletSDK.Identity, config *walletSDK.Config) ([]walletSDK.Iden3CredentialClaimBody, error) {
 	postBody, _ := json.Marshal(map[string]string{
 		"id":    identity.ID.String(),
 		"token": "fe7d9c51-5dcf-46dd-8bbc-ae9a0b716ee3",
@@ -107,7 +123,7 @@ func sendRequestToIssuerToGetClaims(identity *walletSDK.Identity, config *wallet
 	if err != nil {
 		log.Fatalln(err)
 	}
-	var claims []circuits.Claim
+	var claims []walletSDK.Iden3CredentialClaimBody
 	err = json.Unmarshal(body, &claims)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error unmarshaling data from response.")
@@ -115,7 +131,7 @@ func sendRequestToIssuerToGetClaims(identity *walletSDK.Identity, config *wallet
 	return claims, nil
 }
 
-func getClaims(identity *walletSDK.Identity, config *walletSDK.Config) gin.HandlerFunc {
+func fetchClaimsFromIssuer(identity *walletSDK.Identity, config *walletSDK.Config) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		claims, err := sendRequestToIssuerToGetClaims(identity, config)
 		if err != nil {
@@ -134,6 +150,34 @@ func getClaims(identity *walletSDK.Identity, config *walletSDK.Config) gin.Handl
 				c.IndentedJSON(http.StatusCreated, identity)
 			}
 		}
+	}
+	return gin.HandlerFunc(fn)
+}
+
+func convertIden3CredClaimBodyToResponse(claims []walletSDK.Iden3CredentialClaimBody) []ClaimResponseBody {
+	var claimsResponse []ClaimResponseBody
+	for _, claim := range claims {
+		claimsResponse = append(claimsResponse, ClaimResponseBody{
+			ID:               claim.Iden3credential.ID,
+			SchemaURL:        claim.Iden3credential.CredentialSchema.ID,
+			CredentialType:   claim.Iden3credential.CredentialSchema.Type,
+			Expiration:       claim.Iden3credential.Expiration,
+			Updatable:        claim.Iden3credential.Updatable,
+			Version:          claim.Iden3credential.Version,
+			RevocationNonce:  claim.Iden3credential.RevNonce,
+			RevocationStatus: false, // TODO: get revocation status from Issuer API
+			IssuerID:         claim.Data.IssuerID.String(),
+			ClaimData:        claim.Iden3credential.CredentialSubject,
+			ClaimRawData:     claim.Data.Claim,
+		})
+	}
+	return claimsResponse
+}
+
+func getClaims(identity *walletSDK.Identity, config *walletSDK.Config) gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		receivedClaims := convertIden3CredClaimBodyToResponse(identity.GetStoredClaims())
+		c.IndentedJSON(http.StatusOK, receivedClaims)
 	}
 	return gin.HandlerFunc(fn)
 }

@@ -32,7 +32,7 @@ func CreateIden3ClaimFromAPI(claim ClaimAPI) *core.Claim {
 	if claim.ClaimSchemaHashHex != "" {
 		schema, _ = core.NewSchemaHashFromHex(claim.ClaimSchemaHashHex)
 	} else if claim.ClaimSchema != "" {
-		schema, _ = core.NewSchemaHashFromHex(GetHashFromClaimSchema(claim.ClaimSchema, claim.CredentialType))
+		schema, _ = core.NewSchemaHashFromHex(GetHashFromClaimSchemaURL(claim.ClaimSchema, claim.CredentialType))
 	} else {
 		log.Fatal("No schema hash or schema file provided")
 	}
