@@ -33,6 +33,14 @@ type ClaimResponseBody struct {
 	ClaimRawData     *core.Claim            `json:"claimRawData"`
 }
 
+type ProofRequest struct {
+	ProofRequestData protocol.AuthorizationRequestMessage `json:"proofRequestData"`
+	Status           string                               `json:"status"`
+	TimeStamp        time.Time                            `json:"timeStamp"`
+}
+
+var proofRequests []ProofRequest
+
 func main() {
 	config, _ := walletSDK.GetConfig("./config.yaml")
 	identity, _ := walletSDK.GetIdentity("./account.json")
@@ -40,7 +48,7 @@ func main() {
 	router := gin.Default()
 	corsConfig := cors.DefaultConfig()
 	corsConfig.AllowOrigins = []string{"http://localhost:3000"}
-	router.Use(cors.New(corsConfig)) // TODO: Remove this in production and allow only specific domains
+	router.Use(cors.New(corsConfig))
 	router.POST("/api/v1/addClaim", addClaim(identity, config))
 	router.POST("/api/v1/requestProof", requestProof(identity, config))
 	router.POST("/api/v1/fetchClaimsFromIssuer", fetchClaimsFromIssuer(identity, config)) // Why this endpoint is POST?
@@ -48,6 +56,9 @@ func main() {
 	router.GET("/api/v1/getAccount", getAccount(identity))
 	router.GET("/api/v1/getCurrentState", getCurrentState(config, identity))
 	router.GET("/api/v1/getAccountInfo", getAccountInfo(identity))
+	router.POST("/api/v1/addProofRequest", addProofRequest())
+	router.GET("/api/v1/getProofRequests", getProofRequests())
+	router.POST("/api/v1/acceptProofRequest", acceptProofRequest(identity, config))
 
 	router.Run("localhost:8080")
 }
@@ -200,6 +211,97 @@ func getClaims(identity *walletSDK.Identity, config *walletSDK.Config) gin.Handl
 			"claims": receivedClaims,
 		}
 		c.IndentedJSON(http.StatusOK, responseData)
+	}
+	return gin.HandlerFunc(fn)
+}
+
+func addProofRequest() gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		var request protocol.AuthorizationRequestMessage
+
+		if err := c.BindJSON(&request); err != nil {
+			fmt.Println("Error while parsing AuthorizationRequestMessage JSON object. Err: ", err)
+			c.IndentedJSON(http.StatusInternalServerError, err)
+		} else {
+
+			newProofRequest := ProofRequest{
+				ProofRequestData: request,
+				TimeStamp:        time.Now(),
+				Status:           "pending", // Initial status of the proof request
+			}
+			proofRequests = append(proofRequests, newProofRequest)
+			resp := map[string]interface{}{
+				"status": "success",
+			}
+			c.IndentedJSON(http.StatusCreated, resp)
+		}
+	}
+	return gin.HandlerFunc(fn)
+}
+
+func getProofRequests() gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		c.IndentedJSON(http.StatusCreated, proofRequests)
+	}
+	return gin.HandlerFunc(fn)
+}
+
+func sendProofToVerifier(verfierCallbackURL string, request protocol.AuthorizationResponseMessage) error {
+	postBody, _ := json.Marshal(request)
+	responseBody := bytes.NewBuffer(postBody)
+
+	resp, err := http.Post(verfierCallbackURL, "application/json", responseBody)
+	if err != nil {
+		log.Fatalf("An Error Occured %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	var responseData map[string]interface{}
+	err = json.Unmarshal(body, &responseData)
+	if err != nil {
+		return errors.Wrap(err, "Error unmarshaling data from response.")
+	}
+	if responseData["status"] == "failed" {
+		return errors.Wrap(err, "Verifier rejected the proof.")
+	}
+	return nil
+}
+
+func acceptProofRequest(identity *walletSDK.Identity, config *walletSDK.Config) gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		query := c.Request.URL.Query()
+		requestId := query.Get("requestId")
+		if requestId == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "requestId is required",
+			})
+			return
+		}
+
+		for i, proofRequest := range proofRequests {
+			if proofRequest.ProofRequestData.ID == requestId {
+				if resp, err := identity.ProofRequest(proofRequest.ProofRequestData, config); err == nil {
+					err := sendProofToVerifier(proofRequest.ProofRequestData.Body.CallbackURL, *resp)
+					if err != nil {
+						c.IndentedJSON(http.StatusBadRequest, gin.H{
+							"error": err,
+						})
+						return
+					}
+					proofRequests[i].Status = "accepted"
+					resp := map[string]interface{}{
+						"status": "success",
+					}
+					c.IndentedJSON(http.StatusCreated, resp)
+				} else {
+					log.Printf("Failed to process proof request. Err %s\n", err)
+					c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to generate proof")
+				}
+			}
+		}
 	}
 	return gin.HandlerFunc(fn)
 }
