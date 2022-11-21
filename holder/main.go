@@ -12,6 +12,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	core "github.com/iden3/go-iden3-core"
+	"github.com/iden3/go-iden3-crypto/utils"
 	"github.com/iden3/iden3comm/protocol"
 	"github.com/pkg/errors"
 
@@ -46,6 +47,7 @@ func main() {
 	router.GET("/api/v1/getClaims", getClaims(identity, config))
 	router.GET("/api/v1/getAccount", getAccount(identity))
 	router.GET("/api/v1/getCurrentState", getCurrentState(config, identity))
+	router.GET("/api/v1/getAccountInfo", getAccountInfo(identity))
 
 	router.Run("localhost:8080")
 }
@@ -53,6 +55,19 @@ func main() {
 func getAccount(identity *walletSDK.Identity) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		c.IndentedJSON(http.StatusOK, identity)
+	}
+	return gin.HandlerFunc(fn)
+}
+
+func getAccountInfo(identity *walletSDK.Identity) gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+
+		responseData := map[string]interface{}{
+			"id":            identity.ID.String(),
+			"identityState": identity.IDS,
+			"privateKey":    utils.HexEncode(identity.PrivateKey[:]),
+		}
+		c.IndentedJSON(http.StatusOK, responseData)
 	}
 	return gin.HandlerFunc(fn)
 }
