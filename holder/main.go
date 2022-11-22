@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/iden3/go-iden3-auth/pubsignals"
 	core "github.com/iden3/go-iden3-core"
 	"github.com/iden3/go-iden3-crypto/utils"
 	"github.com/iden3/iden3comm/protocol"
@@ -39,6 +40,26 @@ type ProofRequest struct {
 	TimeStamp        time.Time                            `json:"timeStamp"`
 }
 
+type ProofRequestQueryBody struct {
+	AllowedIssuers []string               `json:"allowedIssuers"`
+	SchemaURL      string                 `json:"schemaURL"`
+	SchemaHash     string                 `json:"schemaHash"`
+	CredentialType string                 `json:"credentialType"`
+	Data           map[string]interface{} `json:"data"`
+}
+
+type ProofRequestResponseBody struct {
+	ID          string                  `json:"id"`
+	From        string                  `json:"from"`
+	To          string                  `json:"to"`
+	Message     string                  `json:"message"`
+	Reason      string                  `json:"reason"`
+	CallbackURL string                  `json:"callbackURL"`
+	Status      string                  `json:"status"`
+	TimeStamp   time.Time               `json:"timeStamp"`
+	QueryData   []ProofRequestQueryBody `json:"queryData"`
+}
+
 var proofRequests []ProofRequest
 
 func main() {
@@ -58,7 +79,7 @@ func main() {
 	router.GET("/api/v1/getAccountInfo", getAccountInfo(identity))
 	router.POST("/api/v1/addProofRequest", addProofRequest())
 	router.GET("/api/v1/getProofRequests", getProofRequests())
-	router.POST("/api/v1/acceptProofRequest", acceptProofRequest(identity, config))
+	router.GET("/api/v1/acceptProofRequest", acceptProofRequest(identity, config))
 
 	router.Run("localhost:8080")
 }
@@ -204,6 +225,41 @@ func convertIden3CredClaimBodyToResponse(claims []walletSDK.Iden3CredentialClaim
 	return claimsResponse
 }
 
+// TODO: add error handling
+func getProofRequestToResponse() []ProofRequestResponseBody {
+	var proofRequestResponse []ProofRequestResponseBody
+	for _, proofRequest := range proofRequests {
+		var proofQueries []ProofRequestQueryBody
+		for _, queryReq := range proofRequest.ProofRequestData.Body.Scope {
+			rules := queryReq.Rules
+			jsonStr, _ := json.Marshal(rules["query"])
+			var query pubsignals.Query
+			if err := json.Unmarshal(jsonStr, &query); err != nil {
+				return nil
+			}
+			proofQueries = append(proofQueries, ProofRequestQueryBody{
+				AllowedIssuers: query.AllowedIssuers,
+				SchemaURL:      query.Schema.URL,
+				SchemaHash:     walletSDK.GetHashFromClaimSchemaURL(query.Schema.URL, query.Schema.Type),
+				CredentialType: query.Schema.Type,
+				Data:           query.Req,
+			})
+		}
+		proofRequestResponse = append(proofRequestResponse, ProofRequestResponseBody{
+			ID:          proofRequest.ProofRequestData.ID,
+			From:        proofRequest.ProofRequestData.From,
+			To:          proofRequest.ProofRequestData.To,
+			Message:     proofRequest.ProofRequestData.Body.Message,
+			Reason:      proofRequest.ProofRequestData.Body.Reason,
+			CallbackURL: proofRequest.ProofRequestData.Body.CallbackURL,
+			TimeStamp:   proofRequest.TimeStamp,
+			Status:      proofRequest.Status,
+			QueryData:   proofQueries,
+		})
+	}
+	return proofRequestResponse
+}
+
 func getClaims(identity *walletSDK.Identity, config *walletSDK.Config) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		receivedClaims := convertIden3CredClaimBodyToResponse(identity.GetStoredClaims())
@@ -241,7 +297,10 @@ func addProofRequest() gin.HandlerFunc {
 
 func getProofRequests() gin.HandlerFunc {
 	fn := func(c *gin.Context) {
-		c.IndentedJSON(http.StatusCreated, proofRequests)
+		responseData := map[string]interface{}{
+			"proofRequests": getProofRequestToResponse(),
+		}
+		c.IndentedJSON(http.StatusCreated, responseData)
 	}
 	return gin.HandlerFunc(fn)
 }
