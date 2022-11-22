@@ -1,14 +1,8 @@
-package walletsdk
+package walletSDK
 
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"github.com/iden3/go-circuits"
-	"github.com/iden3/go-iden3-auth/loaders"
-	"github.com/iden3/go-iden3-auth/pubsignals"
-	"github.com/iden3/go-rapidsnark/types"
-	"github.com/iden3/go-schema-processor/processor"
 	"io/ioutil"
 	"log"
 	"math/big"
@@ -16,6 +10,12 @@ import (
 	"os/exec"
 	"path"
 	"strings"
+
+	"github.com/iden3/go-circuits"
+	"github.com/iden3/go-iden3-auth/loaders"
+	"github.com/iden3/go-iden3-auth/pubsignals"
+	"github.com/iden3/go-rapidsnark/types"
+	"github.com/iden3/go-schema-processor/processor"
 
 	jsonSuite "github.com/iden3/go-schema-processor/json"
 	jsonldSuite "github.com/iden3/go-schema-processor/json-ld"
@@ -32,102 +32,90 @@ type ZKInputs map[string]interface{}
 
 // GenerateZkProof executes snarkjs groth16prove function and returns proof only if it's valid
 func GenerateZkProof(circuitPath string, inputs ZKInputs, config *Config) (*types.ZKProof, error) {
-
 	if path.Clean(circuitPath) != circuitPath {
-		return nil, fmt.Errorf("illegal circuitPath")
+		return nil, errors.New("Illegal circuitPath.")
 	}
 
 	// serialize inputs into json
 	inputsJSON, err := json.Marshal(inputs)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to serialize inputs into json")
+		return nil, errors.Wrap(err, "Failed to serialize inputs into json.")
 	}
 
 	// create tmf file for inputs
 	inputFile, err := ioutil.TempFile("tmp", "input-*.json")
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create tmf file for inputs")
+		return nil, errors.Wrap(err, "Failed to create tmf file for inputs.")
 	}
 	defer os.Remove(inputFile.Name())
 
 	// write json inputs into tmp file
 	_, err = inputFile.Write(inputsJSON)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to write json inputs into tmp file")
+		return nil, errors.Wrap(err, "Failed to write json inputs into tmp file.")
 	}
 	err = inputFile.Close()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to close json inputs tmp file")
+		return nil, errors.Wrap(err, "Failed to close json inputs tmp file.")
 	}
 
 	// create tmp witness file
 	wtnsFile, err := ioutil.TempFile("tmp", "witness-*.wtns")
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create tmp witness file")
+		return nil, errors.Wrap(err, "failed to create tmp witness file.")
 	}
 	defer os.Remove(wtnsFile.Name())
 	err = wtnsFile.Close()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to close tmp witness file")
+		return nil, errors.Wrap(err, "Failed to close tmp witness file.")
 	}
 
 	// calculate witness
 	wtnsCmd := exec.Command("node", config.Circuits.JS+"generate_witness.js", circuitPath+"/circuit.wasm", inputFile.Name(), wtnsFile.Name())
 	wtnsOut, err := wtnsCmd.CombinedOutput()
 	if err != nil {
-		log.Println("failed to calculate witness", "wtnsOut", string(wtnsOut))
-		return nil, errors.Wrap(err, "failed to calculate witness")
+		log.Println("Failed to calculate witness", "wtnsOut", string(wtnsOut))
+		return nil, errors.Wrap(err, "Failed to calculate witness.")
 	}
 	log.Println("-- witness calculate completed --")
+
+	// Proof verification
 
 	// create tmp proof file
 	proofFile, err := ioutil.TempFile("tmp", "proof-*.json")
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create tmp proof file")
+		return nil, errors.Wrap(err, "Failed to create tmp proof file.")
 	}
 	defer os.Remove(proofFile.Name())
 	err = proofFile.Close()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to close tmp proof file")
+		return nil, errors.Wrap(err, "Failed to close tmp proof file.")
 	}
 
 	// create tmp public file
 	publicFile, err := ioutil.TempFile("tmp", "public-*.json")
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create tmp public file")
+		return nil, errors.Wrap(err, "Failed to create tmp public file.")
 	}
 	defer os.Remove(publicFile.Name())
 	err = publicFile.Close()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to close tmp public file")
+		return nil, errors.Wrap(err, "Failed to close tmp public file.")
 	}
 
 	// generate proof
-	var execCommandName string
-	var execCommandParams []string
-	execCommandName = "snarkjs"
-	execCommandParams = append(execCommandParams, "groth16", "prove")
-	execCommandParams = append(execCommandParams, circuitPath+"/circuit_final.zkey", wtnsFile.Name(), proofFile.Name(), publicFile.Name())
-	proveCmd := exec.Command(execCommandName, execCommandParams...)
-	log.Println("used prover: %s", execCommandName)
-	proveOut, err := proveCmd.CombinedOutput()
+	err = generateProof(circuitPath, wtnsFile, proofFile, publicFile)
 	if err != nil {
-		log.Println("failed to generate proof", "proveOut", string(proveOut))
-		return nil, errors.Wrap(err, "failed to generate proof")
+		return nil, errors.Wrap(err, "Failed to generate proof.")
 	}
-	log.Println("-- groth16 prove completed --")
+	log.Println("-- groth16 proof generated --")
 
 	// verify proof
-	verifyCmd := exec.Command("snarkjs", "groth16", "verify", circuitPath+"/verification_key.json", publicFile.Name(), proofFile.Name())
-	verifyOut, err := verifyCmd.CombinedOutput()
+	err = verifyProof(circuitPath, proofFile, publicFile)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to verify proof")
+		return nil, errors.Wrap(err, "Failed to verify proof.")
 	}
-	log.Println("-- groth16 verify -- snarkjs result %s", strings.TrimSpace(string(verifyOut)))
-
-	if !strings.Contains(string(verifyOut), "OK!") {
-		return nil, errors.New("invalid proof")
-	}
+	log.Println("-- groth16 proof verified --")
 
 	var proof types.ProofData
 	var pubSignals []string
@@ -135,22 +123,22 @@ func GenerateZkProof(circuitPath string, inputs ZKInputs, config *Config) (*type
 	// read generated public signals
 	publicJSON, err := os.ReadFile(publicFile.Name())
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read generated public signals")
+		return nil, errors.Wrap(err, "Failed to read generated public signals.")
 	}
 
 	err = json.Unmarshal(publicJSON, &pubSignals)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal public signals")
+		return nil, errors.Wrap(err, "Failed to unmarshal public signals.")
 	}
 	// read generated proof
 	proofJSON, err := os.ReadFile(proofFile.Name())
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read generated proof")
+		return nil, errors.Wrap(err, "Failed to read generated proof.")
 	}
 
 	err = json.Unmarshal(proofJSON, &proof)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal generated proof")
+		return nil, errors.Wrap(err, "Failed to unmarshal generated proof.")
 	}
 
 	return &types.ZKProof{Proof: &proof, PubSignals: pubSignals}, nil
@@ -158,86 +146,79 @@ func GenerateZkProof(circuitPath string, inputs ZKInputs, config *Config) (*type
 
 // VerifyZkProof executes snarkjs verify function and returns if proof is valid
 func VerifyZkProof(circuitPath string, zkp *types.ZKProof) error {
-
 	if path.Clean(circuitPath) != circuitPath {
-		return fmt.Errorf("illegal circuitPath")
+		return errors.New("Illegal circuitPath")
 	}
 
 	// create tmp proof file
 	proofFile, err := ioutil.TempFile("tmp", "proof-*.json")
 	if err != nil {
-		return errors.Wrap(err, "failed to create tmp proof file")
+		return errors.Wrap(err, "Failed to create tmp proof file")
 	}
 	defer os.Remove(proofFile.Name())
 
 	// create tmp public file
 	publicFile, err := ioutil.TempFile("tmp", "public-*.json")
 	if err != nil {
-		return errors.Wrap(err, "failed to create tmp public file")
+		return errors.Wrap(err, "Failed to create tmp public file")
 	}
 	defer os.Remove(publicFile.Name())
 
 	// serialize proof into json
 	proofJSON, err := json.Marshal(zkp.Proof)
 	if err != nil {
-		return errors.Wrap(err, "failed to serialize proof into json")
+		return errors.Wrap(err, "Failed to serialize proof into json")
 	}
 
 	// serialize public signals into json
 	publicJSON, err := json.Marshal(zkp.PubSignals)
 	if err != nil {
-		return errors.Wrap(err, "failed to serialize public signals into json")
+		return errors.Wrap(err, "Failed to serialize public signals into json")
 	}
 
 	// write json proof into tmp file
 	_, err = proofFile.Write(proofJSON)
 	if err != nil {
-		return errors.Wrap(err, "failed to write json proof into tmp file")
+		return errors.Wrap(err, "Failed to write json proof into tmp file")
 	}
 	err = proofFile.Close()
 	if err != nil {
-		return errors.Wrap(err, "failed to close json proof tmp file")
+		return errors.Wrap(err, "Failed to close json proof tmp file")
 	}
 
 	// write json public signals into tmp file
 	_, err = publicFile.Write(publicJSON)
 	if err != nil {
-		return errors.Wrap(err, "failed to write json public signals into tmp file")
+		return errors.Wrap(err, "Failed to write json public signals into tmp file.")
 	}
 	err = publicFile.Close()
 	if err != nil {
-		return errors.Wrap(err, "failed to close json public signals tmp file")
+		return errors.Wrap(err, "Failed to close json public signals tmp file.")
 	}
 
 	// verify proof
-	verifyCmd := exec.Command("snarkjs", "groth16", "verify", circuitPath+"/verification_key.json", publicFile.Name(), proofFile.Name())
-	verifyOut, err := verifyCmd.CombinedOutput()
+	err = verifyProof(circuitPath, proofFile, publicFile)
 	if err != nil {
-		return errors.Wrap(err, "failed to verify proof")
+		return errors.Wrap(err, "Failed to verify proof.")
 	}
-	log.Println("-- groth16 verify -- snarkjs result %s", strings.TrimSpace(string(verifyOut)))
-
-	if !strings.Contains(string(verifyOut), "OK!") {
-		return errors.New("invalid proof")
-	}
+	log.Println("-- groth16 proof verified --")
 
 	return nil
 }
 
 func ValidateAndGetCircuitsQuery(q pubsignals.Query, ctx context.Context, loader loaders.SchemaLoader) (*circuits.Query, error) {
-
 	schemaBytes, ext, err := loader.Load(ctx, q.Schema)
 	if err != nil {
-		return nil, errors.Wrap(err, "can't load schema for request query")
+		return nil, errors.Wrap(err, "Can't load schema for request query.")
 	}
 
 	pr, err := prepareProcessor(q.Schema.Type, ext)
 	if err != nil {
-		return nil, errors.Wrap(err, "can't prepare processor for request query")
+		return nil, errors.Wrap(err, "Can't prepare processor for request query.")
 	}
 	queryReq, err := parseRequest(q.Req, schemaBytes, pr)
 	if err != nil {
-		return nil, errors.Wrap(err, "can't parse request query")
+		return nil, errors.Wrap(err, "Can't parse request query.")
 	}
 
 	return queryReq, nil
@@ -252,14 +233,13 @@ func prepareProcessor(claimType, ext string) (*processor.Processor, error) {
 	case jsonldExt:
 		parser = jsonldSuite.Parser{ClaimType: claimType, ParsingStrategy: processor.OneFieldPerSlotStrategy}
 	default:
-		return nil, errors.Errorf(
-			"process suite for schema format %s is not supported", ext)
+		return nil, errors.Errorf("Process suite for schema format %s is not supported.", ext)
 	}
+
 	return processor.InitProcessorOptions(pr, processor.WithParser(parser)), nil
 }
 
 func parseRequest(req map[string]interface{}, schema []byte, pr *processor.Processor) (*circuits.Query, error) {
-
 	if req == nil {
 		return &circuits.Query{
 			SlotIndex: 0,
@@ -284,7 +264,6 @@ func parseRequest(req map[string]interface{}, schema []byte, pr *processor.Proce
 	}
 
 	return &circuits.Query{SlotIndex: slotIndex, Values: values, Operator: operator}, nil
-
 }
 
 func parseFieldPredicate(fieldPredicate map[string]interface{}, err error) ([]*big.Int, int, error) {
@@ -295,7 +274,7 @@ func parseFieldPredicate(fieldPredicate map[string]interface{}, err error) ([]*b
 		var ok bool
 		operator, ok = circuits.QueryOperators[op]
 		if !ok {
-			return nil, 0, errors.New("query operator is not supported")
+			return nil, 0, errors.New("Query operator is not supported.")
 		}
 
 		values, err = getValuesAsArray(v)
@@ -310,9 +289,8 @@ func parseFieldPredicate(fieldPredicate map[string]interface{}, err error) ([]*b
 }
 
 func extractQueryFields(req map[string]interface{}) (fieldName string, fieldPredicate map[string]interface{}, err error) {
-
 	if len(req) > 1 {
-		return "", nil, errors.New("multiple requests not supported")
+		return "", nil, errors.New("Multiple requests not supported.")
 	}
 
 	for field, body := range req {
@@ -320,10 +298,10 @@ func extractQueryFields(req map[string]interface{}) (fieldName string, fieldPred
 		var ok bool
 		fieldPredicate, ok = body.(map[string]interface{})
 		if !ok {
-			return "", nil, errors.New("failed cast type map[string]interface")
+			return "", nil, errors.New("Failed cast type map[string]interface.")
 		}
 		if len(fieldPredicate) > 1 {
-			return "", nil, errors.New("multiple predicates for one field not supported")
+			return "", nil, errors.New("Multiple predicates for one field not supported.")
 		}
 		break
 	}
@@ -343,8 +321,41 @@ func getValuesAsArray(v interface{}) ([]*big.Int, error) {
 			values[i] = new(big.Int).SetInt64(int64(item.(float64)))
 		}
 	default:
-		return nil, errors.Errorf("unsupported values type %T", v)
+		return nil, errors.Errorf("Unsupported values type %T.", v)
 	}
 
 	return values, nil
+}
+
+func generateProof(circuitPath string, wtnsFile *os.File, proofFile *os.File, publicFile *os.File) error {
+	var prog string
+	var args []string
+
+	prog = "snarkjs"
+	args = append(args, "groth16", "prove")
+	args = append(args, circuitPath+"/circuit_final.zkey", wtnsFile.Name(), proofFile.Name(), publicFile.Name())
+
+	cmd := exec.Command(prog, args...)
+	proveOut, err := cmd.CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "Failed to generate proof: proveOut %s", string(proveOut))
+	}
+
+	return nil
+}
+
+func verifyProof(circuitPath string, proofFile *os.File, publicFile *os.File) error {
+	cmd := exec.Command("snarkjs", "groth16", "verify", circuitPath+"/verification_key.json", publicFile.Name(), proofFile.Name())
+
+	verifyOut, err := cmd.CombinedOutput()
+	if err != nil {
+		return errors.Wrap(err, "Failed to verify proof.")
+	}
+	log.Printf("snarkjs result %s", strings.TrimSpace(string(verifyOut)))
+
+	if !strings.Contains(string(verifyOut), "OK!") {
+		return errors.New("Invalid proof.")
+	}
+
+	return nil
 }

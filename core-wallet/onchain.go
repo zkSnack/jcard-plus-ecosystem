@@ -1,6 +1,9 @@
-package walletsdk
+package walletSDK
 
 import (
+	"math/big"
+	state "zkSnacks/walletSDK/contracts"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	types2 "github.com/ethereum/go-ethereum/core/types"
@@ -9,8 +12,6 @@ import (
 	core "github.com/iden3/go-iden3-core"
 	"github.com/iden3/go-rapidsnark/types"
 	"github.com/pkg/errors"
-	"math/big"
-	state "zkSnacks/walletsdk/contracts"
 )
 
 func getClient(config *Config) (*ethclient.Client, error) {

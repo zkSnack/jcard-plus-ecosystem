@@ -1,14 +1,15 @@
-package walletsdk
+package walletSDK
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	core "github.com/iden3/go-iden3-core"
-	"github.com/iden3/go-merkletree-sql/v2"
 	"log"
 	"math/big"
 	"strings"
+
+	core "github.com/iden3/go-iden3-core"
+	"github.com/iden3/go-merkletree-sql/v2"
 )
 
 func toJSON(inputJSON []byte) map[string]interface{} {
