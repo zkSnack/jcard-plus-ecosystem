@@ -37,19 +37,17 @@ func NewIssuer() *Issuer {
 	return &issuer
 }
 
-func (i *Issuer) getClaimToAddV2(iden3credentialAPI verifiable.Iden3Credential) (*core.Claim, error) {
+func (i *Issuer) getClaimToAdd(iden3credentialAPI verifiable.Iden3Credential) (*core.Claim, error) {
 	loader := loaders.HTTP{URL: iden3credentialAPI.CredentialSchema.ID}
 	credType := iden3credentialAPI.CredentialSubject["type"].(string)
-	// subjectDID, err := core.ParseDID(iden3credentialAPI.CredentialSubject["id"].(string))
-	// if err != nil {
-	// 	return nil, err
-	// }
+
 	parser := jsonld.Parser{ClaimType: credType,
 		ParsingStrategy: processor.OneFieldPerSlotStrategy}
 	schemaBytes, _, err := loader.Load(context.Background())
 	if err != nil {
 		return nil, errors.New("Failed to add claim.")
 	}
+
 	// Careful: This will remove some fields from the iden3credentialAPI.CredentialSubject
 	// https://github.com/iden3/go-schema-processor/blob/main/json-ld/parser.go#L69
 	// But for our purpose we don't need them
@@ -64,15 +62,12 @@ func (i *Issuer) getClaimToAddV2(iden3credentialAPI verifiable.Iden3Credential) 
 		return nil, errors.New("Failed to get ID from claim.")
 	}
 
-	// if subjectDID.ID != id {
-	// 	return nil, errors.New("ID from claim and credential subject do not match.")
-	// }
 	return claimToAdd, nil
 }
 
 func (i *Issuer) IssueClaim(iden3credentialAPI verifiable.Iden3Credential) (*circuits.Claim, error) {
 	// Get core claim from Claim API
-	claimToAdd, err := i.getClaimToAddV2(iden3credentialAPI)
+	claimToAdd, err := i.getClaimToAdd(iden3credentialAPI)
 	if err != nil {
 		log.Printf("Failed to add claim: %v\n", err)
 		return nil, err
@@ -152,75 +147,6 @@ func (i *Issuer) IssueClaim(iden3credentialAPI verifiable.Iden3Credential) (*cir
 
 	return &signedClaim, nil
 }
-
-// func (i *Issuer) IssueClaim(claim walletSDK.ClaimAPI) (*circuits.Claim, error) {
-// 	// Get core claim from Claim API
-// 	claimToAdd := walletSDK.CreateIden3ClaimFromAPI(claim)
-
-// 	err := i.Identity.AddClaim(claim, i.Config)
-// 	if err != nil {
-// 		log.Println("Error while adding claim to identity", err)
-// 		return nil, errors.New("Failed to add claim.")
-// 	}
-
-// 	err = walletSDK.DumpIdentity(i.Identity)
-// 	if err != nil {
-// 		return nil, errors.New("Failed to dump file.")
-// 	}
-
-// 	hIndexClaim, hValueClaim, _ := claimToAdd.HiHv()
-// 	claimHash, err := merkletree.HashElems(hIndexClaim, hValueClaim)
-// 	if err != nil {
-// 		return nil, errors.New("Failed to to hash claim.")
-// 	}
-
-// 	// Generate proof of claim
-// 	claimProof, _, err := i.Identity.Clt.GenerateProof(context.Background(), hIndexClaim, i.Identity.Clt.Root())
-// 	if err != nil {
-// 		return nil, errors.New("Failed to generate MTP for claim.")
-// 	}
-
-// 	claimRevNonce := new(big.Int).SetUint64(claimToAdd.GetRevocationNonce())
-// 	proofNotRevoke, _, err := i.Identity.Ret.GenerateProof(context.Background(), claimRevNonce, i.Identity.Ret.Root())
-// 	if err != nil {
-// 		return nil, errors.New("Failed to generate revocation MTP for claim")
-// 	}
-
-// 	// Sign claim
-// 	claimSignature := i.Identity.PrivateKey.SignPoseidon(claimHash.BigInt())
-
-// 	// Generate circuit.Claim
-// 	issuerAuthClaimMTP := i.Identity.GetUserAuthClaim()
-// 	currentTreeState := i.Identity.GetTreeState()
-
-// 	claimIssuerSignature := circuits.BJJSignatureProof{
-// 		IssuerID:              i.Identity.ID,
-// 		IssuerTreeState:       issuerAuthClaimMTP.TreeState,
-// 		IssuerAuthClaimMTP:    issuerAuthClaimMTP.Proof,
-// 		Signature:             claimSignature,
-// 		IssuerAuthClaim:       issuerAuthClaimMTP.Claim,
-// 		IssuerAuthNonRevProof: *issuerAuthClaimMTP.NonRevProof,
-// 	}
-
-// 	signedClaim := circuits.Claim{
-// 		Claim:     claimToAdd,
-// 		Proof:     claimProof,
-// 		TreeState: currentTreeState,
-// 		IssuerID:  i.Identity.ID,
-// 		NonRevProof: &circuits.ClaimNonRevStatus{
-// 			TreeState: currentTreeState,
-// 			Proof:     proofNotRevoke,
-// 		},
-// 		SignatureProof: claimIssuerSignature,
-// 	}
-
-// 	// Assign claim to associate holder
-// 	claimFullData := walletSDK.ClaimBody{Header: claim, Data: signedClaim}
-
-// 	i.IssuedClaims[claim.SubjectID] = append(i.IssuedClaims[claim.SubjectID], claimFullData)
-
-// 	return &signedClaim, nil
-// }
 
 func (i *Issuer) GetIssuedClaims(holderID string) []walletSDK.Iden3CredentialClaimBody {
 	return i.IssuedClaims[holderID]
