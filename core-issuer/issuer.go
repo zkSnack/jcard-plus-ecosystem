@@ -18,8 +18,8 @@ type Issuer struct {
 }
 
 func NewIssuer() *Issuer {
-	config, _ := walletSDK.GetConfig("../issuer/config.yaml")
-	identity, _ := walletSDK.GetIdentity("../issuer/account.json")
+	config, _ := walletSDK.GetConfig("./config.yaml")
+	identity, _ := walletSDK.GetIdentity("./account.json")
 
 	issuer := Issuer{
 		Config:       config,

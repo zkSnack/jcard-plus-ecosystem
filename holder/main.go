@@ -17,8 +17,8 @@ import (
 )
 
 func main() {
-	config, _ := walletSDK.GetConfig("../holder/config.yaml")
-	identity, _ := walletSDK.GetIdentity("../holder/account.json")
+	config, _ := walletSDK.GetConfig("./config.yaml")
+	identity, _ := walletSDK.GetIdentity("./account.json")
 
 	router := gin.Default()
 	router.POST("/api/v1/addClaim", addClaim(identity, config))
