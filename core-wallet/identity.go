@@ -17,21 +17,27 @@ import (
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/iden3/go-merkletree-sql/v2"
 	"github.com/iden3/go-merkletree-sql/v2/db/memory"
+	verifiable "github.com/iden3/go-schema-processor/verifiable"
 	"github.com/iden3/iden3comm/packers"
 	"github.com/iden3/iden3comm/protocol"
 	"github.com/pkg/errors"
 )
 
+type Iden3CredentialClaimBody struct {
+	Iden3credential verifiable.Iden3Credential `json:"iden3credential"`
+	Data            circuits.Claim             `json:"data"`
+}
+
 type Identity struct {
-	ID             *core.ID                  `json:"id"`
-	IDS            *merkletree.Hash          `json:"identity_state"`
-	PrivateKey     babyjub.PrivateKey        `json:"private_key"`
-	AuthClaim      *core.Claim               `json:"authClaim"`
-	Claims         []*core.Claim             `json:"claims"`
-	Clt            *merkletree.MerkleTree    `json:"clt"`
-	Ret            *merkletree.MerkleTree    `json:"ret"`
-	Rot            *merkletree.MerkleTree    `json:"rot"`
-	ReceivedClaims map[string]circuits.Claim `json:"received_claims"`
+	ID             *core.ID                            `json:"id"`
+	IDS            *merkletree.Hash                    `json:"identity_state"`
+	PrivateKey     babyjub.PrivateKey                  `json:"private_key"`
+	AuthClaim      *core.Claim                         `json:"authClaim"`
+	Claims         []*core.Claim                       `json:"claims"`
+	Clt            *merkletree.MerkleTree              `json:"clt"`
+	Ret            *merkletree.MerkleTree              `json:"ret"`
+	Rot            *merkletree.MerkleTree              `json:"rot"`
+	ReceivedClaims map[string]Iden3CredentialClaimBody `json:"received_claims"`
 }
 
 type Config struct {
@@ -91,7 +97,7 @@ func NewIdentity() (*Identity, error) {
 		Clt:            clt,
 		Ret:            ret,
 		Rot:            rot,
-		ReceivedClaims: make(map[string]circuits.Claim),
+		ReceivedClaims: make(map[string]Iden3CredentialClaimBody),
 	}
 	return &identity, nil
 }
@@ -149,7 +155,7 @@ func LoadIdentityFromFile(file string) (*Identity, error) {
 	return identity, nil
 }
 
-func (identity *Identity) AddClaim(claim ClaimAPI, config *Config) error {
+func (identity *Identity) AddCoreClaim(claimToAdd *core.Claim, config *Config) error {
 	ctx := context.Background()
 
 	authClaim := identity.AuthClaim
@@ -172,7 +178,6 @@ func (identity *Identity) AddClaim(claim ClaimAPI, config *Config) error {
 		return errors.Wrap(err, "Error while adding the root of the Clt to the Rot.")
 	}
 
-	claimToAdd := CreateIden3ClaimFromAPI(claim)
 	hIndex, hValue, _ := claimToAdd.HiHv()
 
 	err = identity.Clt.Add(ctx, hIndex, hValue)
@@ -221,13 +226,27 @@ func (identity *Identity) AddClaim(claim ClaimAPI, config *Config) error {
 	return nil
 }
 
-func (identity *Identity) AddClaimsFromIssuer(claims []circuits.Claim) error {
+func (identity *Identity) AddClaim(claim ClaimAPI, config *Config) error {
+	claimToAdd := CreateIden3ClaimFromAPI(claim)
+	return identity.AddCoreClaim(claimToAdd, config)
+}
+
+func (identity *Identity) AddClaimsFromIssuer(claims []Iden3CredentialClaimBody) error {
 	// TODO: Better key for looking up Claims
 	for _, claim := range claims {
-		schemaHash, _ := claim.Claim.GetSchemaHash().MarshalText()
+		schemaHash, _ := claim.Data.Claim.GetSchemaHash().MarshalText()
 		identity.ReceivedClaims[string(schemaHash)] = claim
 	}
 	return nil
+}
+
+// TODO: Add a functionality to add self claims as well.
+func (identity *Identity) GetStoredClaims() []Iden3CredentialClaimBody {
+	claims := []Iden3CredentialClaimBody{}
+	for _, claim := range identity.ReceivedClaims {
+		claims = append(claims, claim)
+	}
+	return claims
 }
 
 func (identity *Identity) ProofRequest(request protocol.AuthorizationRequestMessage, config *Config) (*protocol.AuthorizationResponseMessage, error) {
@@ -254,7 +273,7 @@ func (identity *Identity) ProofRequest(request protocol.AuthorizationRequestMess
 			Challenge:        challenge,
 			Signature:        identity.PrivateKey.SignPoseidon(challenge),
 			CurrentTimeStamp: time.Now().Unix(),
-			Claim:            val,
+			Claim:            val.Data,
 			Query:            *parsedQuery,
 		}
 		inputBytes, err := atomicInputs.InputsMarshal()

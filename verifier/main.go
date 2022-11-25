@@ -5,11 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/iden3/go-circuits"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"strconv"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/iden3/go-circuits"
 
 	auth "github.com/iden3/go-iden3-auth"
 	"github.com/iden3/go-iden3-auth/loaders"
@@ -18,8 +22,159 @@ import (
 	"github.com/iden3/iden3comm/protocol"
 )
 
+var idToQueryInfo map[string]pubsignals.Query
+var sessionIDToVerificationReqMap map[uint64]protocol.AuthorizationRequestMessage
+
+const VerifierID = "1125GJqgw6YEsKFwj63GY87MMxPL9kwDKxPUiwMLNZ"
+const VerifierHost = "http://localhost:9090"
+const CallbackURL = "/api/v1/callback"
+
+// Currently fixing the query directly in the code, will be changed to a dynamic query in the future
+func Init() {
+	idToQueryInfo = make(map[string]pubsignals.Query)
+	sessionIDToVerificationReqMap = make(map[uint64]protocol.AuthorizationRequestMessage)
+	idToQueryInfo["1"] = pubsignals.Query{
+		AllowedIssuers: []string{"*"},
+		Req: map[string]interface{}{
+			"birthDay": map[string]interface{}{
+				"$lt": 20100101,
+			},
+		},
+		Schema: protocol.Schema{
+			URL:  "https://raw.githubusercontent.com/pratik1998/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld",
+			Type: "AgeCredential",
+		},
+	}
+}
+
 func main() {
-	Authenticate()
+	// Authenticate()
+
+	// Populate the map with the query
+	Init()
+
+	router := gin.Default()
+	corsConfig := cors.DefaultConfig()
+	corsConfig.AllowOrigins = []string{"http://localhost:3000"}
+	router.Use(cors.New(corsConfig)) // TODO: Remove this in production and allow only specific domains
+	router.GET("/api/v1/viewQuery", viewQuery())
+	router.GET("/api/v1/requestVerificationQuery", requestVerificationQuery())
+	router.POST("/api/v1/callback", authenticateCallback())
+
+	router.Run("localhost:9090")
+}
+
+func viewQuery() gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		query := c.Request.URL.Query()
+		id := query.Get("id")
+		if id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "id is required",
+			})
+			return
+		}
+		queryInfo, ok := idToQueryInfo[id]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "id not found",
+			})
+			return
+		}
+		responseData := map[string]interface{}{
+			"query":      queryInfo,
+			"verifierId": VerifierID,
+		}
+		c.IndentedJSON(http.StatusOK, responseData)
+	}
+	return gin.HandlerFunc(fn)
+}
+
+func requestVerificationQuery() gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		query := c.Request.URL.Query()
+		queryId := query.Get("queryId")
+		senderId := query.Get("senderId")
+		if queryId == "" || senderId == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "queryId and senderId query parameter is required",
+			})
+			return
+		}
+		queryInfo, ok := idToQueryInfo[queryId]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "queryId not found",
+			})
+			return
+		}
+		sessionID := rand.Uint64()
+		callbackUri := fmt.Sprintf("%s%s?sessionId=", VerifierHost, CallbackURL) + strconv.FormatUint(sessionID, 10)
+
+		var request protocol.AuthorizationRequestMessage
+		// Generate request for basic authentication
+		request = auth.CreateAuthorizationRequestWithMessage("To do adult stuff", "Age is above 18", VerifierID, callbackUri)
+		request.To = senderId
+
+		// Add request for a specific proof
+		var mtpProofRequest protocol.ZeroKnowledgeProofRequest
+		mtpProofRequest.ID = 1
+		mtpProofRequest.CircuitID = string(circuits.AtomicQuerySigCircuitID)
+		mtpProofRequest.Rules = map[string]interface{}{
+			"query": queryInfo,
+		}
+
+		request.Body.Scope = append(request.Body.Scope, mtpProofRequest)
+
+		// Add request to map serve it later when the callback is received
+		sessionIDToVerificationReqMap[sessionID] = request
+
+		c.IndentedJSON(http.StatusOK, request)
+	}
+	return gin.HandlerFunc(fn)
+}
+
+func authenticateCallback() gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		query := c.Request.URL.Query()
+		sessionID := query.Get("sessionId")
+		if sessionID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "sessionId is required",
+			})
+			return
+		}
+		var response protocol.AuthorizationResponseMessage
+		if err := c.BindJSON(&response); err != nil {
+			fmt.Println("Error while parsing AuthorizationResponseMessage JSON object. Err: ", err)
+			c.IndentedJSON(http.StatusInternalServerError, err)
+			return
+		}
+		sessionIDInt, err := strconv.ParseUint(sessionID, 10, 64)
+		if err != nil {
+			fmt.Println("Error while parsing sessionId. Err: ", err)
+			c.IndentedJSON(http.StatusInternalServerError, err)
+			return
+		}
+		request, ok := sessionIDToVerificationReqMap[sessionIDInt]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "sessionId not found",
+			})
+			return
+		}
+		verified := Verify(response, request)
+		status := "failed"
+		if verified {
+			status = "success"
+		}
+
+		resp := map[string]interface{}{
+			"status": status,
+		}
+		c.IndentedJSON(http.StatusCreated, resp)
+	}
+	return gin.HandlerFunc(fn)
 }
 
 func sendRequestWallet(postBody []byte, request protocol.AuthorizationRequestMessage) {
@@ -44,7 +199,7 @@ func sendRequestWallet(postBody []byte, request protocol.AuthorizationRequestMes
 
 func Authenticate() {
 	// Audience is verifier id
-	rURL := "http://localhost:8080/"
+	rURL := "http://localhost:8080"
 	sessionID := 1
 	CallbackURL := "/api/callback"
 	Audience := "1125GJqgw6YEsKFwj63GY87MMxPL9kwDKxPUiwMLNZ"
@@ -72,7 +227,7 @@ func Authenticate() {
 				},
 			},
 			Schema: protocol.Schema{
-				URL:  "http://localhost:8000/student-age.json-ld",
+				URL:  "https://raw.githubusercontent.com/pratik1998/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld",
 				Type: "AgeCredential",
 			},
 		},
@@ -84,7 +239,7 @@ func Authenticate() {
 	sendRequestWallet(jsonBytes, request)
 }
 
-func Verify(response protocol.AuthorizationResponseMessage, request protocol.AuthorizationRequestMessage) {
+func Verify(response protocol.AuthorizationResponseMessage, request protocol.AuthorizationRequestMessage) bool {
 
 	// Add Polygon RPC node endpoint - needed to read on-chain state
 	ethURL := "https://rpc-mumbai.matic.today"
@@ -107,8 +262,9 @@ func Verify(response protocol.AuthorizationResponseMessage, request protocol.Aut
 	err := verifier.VerifyAuthResponse(context.Background(), response, request)
 	if err != nil {
 		log.Fatalf("Failed to verify %s", err)
-		return
+		return false
 	}
 
 	fmt.Println("Successfully authenticated")
+	return true
 }
