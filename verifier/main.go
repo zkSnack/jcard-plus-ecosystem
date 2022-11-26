@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/iden3/go-circuits"
 
@@ -26,7 +25,7 @@ var idToQueryInfo map[string]pubsignals.Query
 var sessionIDToVerificationReqMap map[uint64]protocol.AuthorizationRequestMessage
 
 const VerifierID = "1125GJqgw6YEsKFwj63GY87MMxPL9kwDKxPUiwMLNZ"
-const VerifierHost = "http://localhost:9090"
+const VerifierHost = "https://a488-205-215-243-16.ngrok.io"
 const CallbackURL = "/api/v1/callback"
 
 // Currently fixing the query directly in the code, will be changed to a dynamic query in the future
@@ -54,14 +53,29 @@ func main() {
 	Init()
 
 	router := gin.Default()
-	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowOrigins = []string{"http://localhost:3000"}
-	router.Use(cors.New(corsConfig)) // TODO: Remove this in production and allow only specific domains
+	router.LoadHTMLGlob("./static/index.html")
+
+	router.GET("/", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "index.html", nil)
+	})
+
+	router.Static("/static", "./static")
+	router.GET("/api/v1/sign-in", generateQR())
 	router.GET("/api/v1/viewQuery", viewQuery())
 	router.GET("/api/v1/requestVerificationQuery", requestVerificationQuery())
 	router.POST("/api/v1/callback", authenticateCallback())
 
 	router.Run("localhost:9090")
+}
+
+func generateQR() gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		responseData := map[string]interface{}{
+			"url": VerifierHost + "/api/v1/requestVerificationQuery?queryId=1",
+		}
+		c.IndentedJSON(http.StatusOK, responseData)
+	}
+	return gin.HandlerFunc(fn)
 }
 
 func viewQuery() gin.HandlerFunc {

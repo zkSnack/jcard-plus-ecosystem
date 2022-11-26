@@ -22,6 +22,7 @@ services:
     environment:
       - ISSUER_URL=http://issuer.local:8090
       - PRIVATE_KEY=<PRIVATE_KEY>
+      - JHU_TOKEN=<JHU_TOKEN>
     networks:
       jcard:
         aliases:

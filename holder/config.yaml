@@ -1,6 +1,7 @@
 issuer:
   url: ${ISSUER_URL:-http://localhost:8090}
   id: 116GWDn9usS47AyRQHVtLfx9hF9rdsFiyVsH7obPN7
+  token: ${JHU_TOKEN:-fe7d9c51-5dcf-46dd-8bbc-ae9a0b716ee3}
 
 circuits:
   path: ${CIRCUITS_PATH:-../static/compiled-circuits/}

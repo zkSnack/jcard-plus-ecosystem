@@ -45,6 +45,7 @@ type Config struct {
 		URL           string `yaml:"url"`
 		ID            string `yaml:"id"`
 		DataDirectory string `yaml:"dataDirectory"`
+		Token         string `yaml:"token"`
 	} `yaml:"issuer"`
 	Circuits struct {
 		Path string `yaml:"path"`
