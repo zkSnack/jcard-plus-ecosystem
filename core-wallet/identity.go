@@ -42,9 +42,10 @@ type Identity struct {
 
 type Config struct {
 	Issuer struct {
-		URL             string `yaml:"url"`
-		ID              string `yaml:"id"`
-		ClaimSchemaRoot string `yaml:"claimSchemaRoot"`
+		URL           string `yaml:"url"`
+		ID            string `yaml:"id"`
+		DataDirectory string `yaml:"dataDirectory"`
+		Token         string `yaml:"token"`
 	} `yaml:"issuer"`
 	Circuits struct {
 		Path string `yaml:"path"`
@@ -56,6 +57,10 @@ type Config struct {
 		PrivateKey      string   `yaml:"privateKey"`
 		ChainID         *big.Int `yaml:"chainID"`
 	} `yaml:"web3"`
+	UI struct {
+		StaticDir string `yaml:"staticDir"`
+		HtmlDir   string `yaml:"htmlDir"`
+	} `yaml:"ui"`
 }
 
 func NewIdentity() (*Identity, error) {

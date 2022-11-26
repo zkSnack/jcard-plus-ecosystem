@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/gin-contrib/cors"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/iden3/go-iden3-auth/pubsignals"
 	core "github.com/iden3/go-iden3-core"
@@ -67,9 +67,18 @@ func main() {
 	identity, _ := walletSDK.GetIdentity("./account.json")
 
 	router := gin.Default()
-	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowOrigins = []string{"http://localhost:3000"}
-	router.Use(cors.New(corsConfig))
+	if gin.Mode() == gin.DebugMode {
+		corsConfig := cors.DefaultConfig()
+		corsConfig.AllowOrigins = []string{"http://localhost:3000"}
+		router.Use(cors.New(corsConfig))
+	} else if gin.Mode() == gin.ReleaseMode {
+		router.LoadHTMLGlob(config.UI.HtmlDir)
+		router.GET("/", func(c *gin.Context) {
+			c.HTML(http.StatusOK, "index.html", nil)
+		})
+		router.Static("/static", config.UI.StaticDir)
+	}
+
 	router.POST("/api/v1/addClaim", addClaim(identity, config))
 	router.POST("/api/v1/requestProof", requestProof(identity, config))
 	router.POST("/api/v1/fetchClaimsFromIssuer", fetchClaimsFromIssuer(identity, config)) // Why this endpoint is POST?
@@ -77,11 +86,11 @@ func main() {
 	router.GET("/api/v1/getAccount", getAccount(identity))
 	router.GET("/api/v1/getCurrentState", getCurrentState(config, identity))
 	router.GET("/api/v1/getAccountInfo", getAccountInfo(identity))
-	router.POST("/api/v1/addProofRequest", addProofRequest())
+	router.POST("/api/v1/addProofRequest", addProofRequest(identity))
 	router.GET("/api/v1/getProofRequests", getProofRequests())
 	router.GET("/api/v1/acceptProofRequest", acceptProofRequest(identity, config))
 
-	router.Run("localhost:8080")
+	router.Run("0.0.0.0:8080")
 }
 
 func getAccount(identity *walletSDK.Identity) gin.HandlerFunc {
@@ -161,18 +170,18 @@ func requestProof(identity *walletSDK.Identity, config *walletSDK.Config) gin.Ha
 func sendRequestToIssuerToGetClaims(identity *walletSDK.Identity, config *walletSDK.Config) ([]walletSDK.Iden3CredentialClaimBody, error) {
 	postBody, _ := json.Marshal(map[string]string{
 		"id":    identity.ID.String(),
-		"token": "fe7d9c51-5dcf-46dd-8bbc-ae9a0b716ee3",
+		"token": config.Issuer.Token,
 	})
 	responseBody := bytes.NewBuffer(postBody)
 
 	resp, err := http.Post(config.Issuer.URL+"/api/v1/issueClaim", "application/json", responseBody)
 	if err != nil {
-		log.Fatalf("An Error Occured %v", err)
+		return nil, errors.Wrap(err, "Failed while submitting claim to the issuer.")
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, errors.Wrap(err, "Failed while submitting claim to the issuer.")
 	}
 	var claims []walletSDK.Iden3CredentialClaimBody
 	err = json.Unmarshal(body, &claims)
@@ -271,25 +280,47 @@ func getClaims(identity *walletSDK.Identity, config *walletSDK.Config) gin.Handl
 	return gin.HandlerFunc(fn)
 }
 
-func addProofRequest() gin.HandlerFunc {
+func addProofRequest(identity *walletSDK.Identity) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
-		var request protocol.AuthorizationRequestMessage
+		var url struct {
+			URL string `json:"url"`
+		}
 
-		if err := c.BindJSON(&request); err != nil {
-			fmt.Println("Error while parsing AuthorizationRequestMessage JSON object. Err: ", err)
+		if err := c.BindJSON(&url); err != nil {
+			fmt.Println("Error while getting url from JSON object. Err: ", err)
 			c.IndentedJSON(http.StatusInternalServerError, err)
 		} else {
+			resp, err := http.Get(url.URL + "&senderId=" + identity.ID.String())
+			if err != nil {
+				fmt.Println("Failed while getting query from verifier. Err: ", err)
+				c.IndentedJSON(http.StatusInternalServerError, err)
+				return
+			}
+			defer resp.Body.Close()
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				fmt.Println("Failed while getting query from verifier. Err: ", err)
+				c.IndentedJSON(http.StatusInternalServerError, err)
+			}
 
-			newProofRequest := ProofRequest{
-				ProofRequestData: request,
-				TimeStamp:        time.Now(),
-				Status:           "pending", // Initial status of the proof request
+			var request protocol.AuthorizationRequestMessage
+
+			err = json.Unmarshal(body, &request)
+			if err != nil {
+				fmt.Println("Error while parsing AuthorizationRequestMessage JSON object. Err: ", err)
+				c.IndentedJSON(http.StatusInternalServerError, err)
+			} else {
+				newProofRequest := ProofRequest{
+					ProofRequestData: request,
+					TimeStamp:        time.Now(),
+					Status:           "pending", // Initial status of the proof request
+				}
+				proofRequests = append(proofRequests, newProofRequest)
+				resp := map[string]interface{}{
+					"status": "success",
+				}
+				c.IndentedJSON(http.StatusCreated, resp)
 			}
-			proofRequests = append(proofRequests, newProofRequest)
-			resp := map[string]interface{}{
-				"status": "success",
-			}
-			c.IndentedJSON(http.StatusCreated, resp)
 		}
 	}
 	return gin.HandlerFunc(fn)

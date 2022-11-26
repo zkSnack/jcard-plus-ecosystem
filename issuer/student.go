@@ -38,9 +38,9 @@ type CredentialSchema struct {
 
 var idToStudentInfo map[string]Student
 
-func loadStudentInfo() error {
+func loadStudentInfo(config *walletSDK.Config) error {
 	// Read database
-	content, err := ioutil.ReadFile("../data/students.json")
+	content, err := ioutil.ReadFile(config.Issuer.DataDirectory + "/students.json")
 	if err != nil {
 		return err
 	}
@@ -63,9 +63,6 @@ func loadStudentInfo() error {
 }
 
 func getStudentInfoByToken(token string) (*Student, error) {
-	if idToStudentInfo == nil {
-		loadStudentInfo()
-	}
 	if val, ok := idToStudentInfo[token]; ok {
 		return &val, nil
 	}

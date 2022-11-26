@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"os"
 	"strings"
 
 	core "github.com/iden3/go-iden3-core"
@@ -66,4 +67,19 @@ func checkGenesisStateID(id, state *big.Int) (bool, error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+func envMapper(placeholderName string) string {
+	split := strings.Split(placeholderName, ":-")
+	defValue := ""
+	if len(split) == 2 {
+		placeholderName = split[0]
+		defValue = split[1]
+	}
+
+	val, ok := os.LookupEnv(placeholderName)
+	if !ok {
+		return defValue
+	}
+	return val
 }
