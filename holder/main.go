@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/iden3/go-iden3-auth/pubsignals"
 	core "github.com/iden3/go-iden3-core"
@@ -67,9 +66,14 @@ func main() {
 	identity, _ := walletSDK.GetIdentity("./account.json")
 
 	router := gin.Default()
-	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowOrigins = []string{"http://localhost:3000"}
-	router.Use(cors.New(corsConfig))
+	router.LoadHTMLGlob(config.UI.HtmlDir)
+
+	router.GET("/", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "index.html", nil)
+	})
+
+	router.Static("/static", config.UI.StaticDir)
+
 	router.POST("/api/v1/addClaim", addClaim(identity, config))
 	router.POST("/api/v1/requestProof", requestProof(identity, config))
 	router.POST("/api/v1/fetchClaimsFromIssuer", fetchClaimsFromIssuer(identity, config)) // Why this endpoint is POST?
@@ -81,7 +85,7 @@ func main() {
 	router.GET("/api/v1/getProofRequests", getProofRequests())
 	router.GET("/api/v1/acceptProofRequest", acceptProofRequest(identity, config))
 
-	router.Run("localhost:8080")
+	router.Run("0.0.0.0:8080")
 }
 
 func getAccount(identity *walletSDK.Identity) gin.HandlerFunc {

@@ -33,7 +33,7 @@ type ZKInputs map[string]interface{}
 // GenerateZkProof executes snarkjs groth16prove function and returns proof only if it's valid
 func GenerateZkProof(circuitPath string, inputs ZKInputs, config *Config) (*types.ZKProof, error) {
 	if path.Clean(circuitPath) != circuitPath {
-		return nil, errors.New("Illegal circuitPath.")
+		return nil, errors.Errorf("Illegal circuitPath: %s", circuitPath)
 	}
 
 	// serialize inputs into json

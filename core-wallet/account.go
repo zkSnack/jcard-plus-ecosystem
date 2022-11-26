@@ -16,6 +16,7 @@ func GetConfig(filename string) (*Config, error) {
 		return nil, errors.New("Failed to open the config file.")
 	}
 
+	yfile = []byte(os.Expand(string(yfile), envMapper))
 	config := new(Config)
 	err = yaml.Unmarshal(yfile, config)
 	if err != nil {

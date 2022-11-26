@@ -1,0 +1,49 @@
+version: '3'
+
+networks:
+  jcard:
+
+services:
+  holder:
+    depends_on:
+      - issuer
+    build:
+      context: .
+      dockerfile: holder/Dockerfile
+    container_name: holder
+    image: holder:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /dev/urandom:/dev/random
+      - holder:/home/app
+    entrypoint: "/home/app/holder"
+    environment:
+      - ISSUER_URL=http://issuer.local:8090
+      - PRIVATE_KEY=<PRIVATE_KEY>
+    networks:
+      jcard:
+        aliases:
+          - holder.local
+  issuer:
+    build:
+      context: .
+      dockerfile: issuer/Dockerfile
+    container_name: issuer
+    image: issuer:latest
+    restart: unless-stopped
+    volumes:
+      - /dev/urandom:/dev/random
+      - issuer:/home/app
+    entrypoint: "/home/app/issuer"
+    environment:
+      - PRIVATE_KEY=<PRIVATE_KEY>
+    networks:
+      jcard:
+        aliases:
+          - issuer.local
+
+volumes:
+  holder:
+  issuer:

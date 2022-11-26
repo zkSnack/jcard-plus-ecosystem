@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 	"zkSnacks/issuerSDK"
 	"zkSnacks/walletSDK"
@@ -14,15 +15,17 @@ type IssueClaimsBody struct {
 }
 
 func main() {
-	loadStudentInfo()
-
 	jhuIssuer := issuerSDK.NewIssuer()
+	err := loadStudentInfo(jhuIssuer.Config)
+	if err != nil {
+		log.Fatal("Failed to load students data")
+	}
 
 	router := gin.Default()
 	router.POST("/api/v1/issueClaim", issueClaim(jhuIssuer))
 	router.GET("/api/v1/getCurrentState", getCurrentState(jhuIssuer.Config, jhuIssuer.Identity))
 
-	router.Run("localhost:8090")
+	router.Run("0.0.0.0:8090")
 }
 
 func issueClaim(jhuIssuer *issuerSDK.Issuer) gin.HandlerFunc {
