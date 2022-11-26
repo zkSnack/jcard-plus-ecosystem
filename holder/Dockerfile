@@ -13,7 +13,13 @@ RUN npm install -g snarkjs@latest
 ENV PATH=${PATH}:/home/app/node/.npm-global/bin
 
 WORKDIR /build
-COPY holder ./holder
+COPY holder/main.go ./holder/main.go
+COPY holder/config.yaml ./holder/config.yaml
+COPY holder/go.mod ./holder/go.mod
+COPY holder/go.sum ./holder/go.sum
+COPY holder/holder-front-end/package.json ./holder/holder-front-end/package.json
+COPY holder/holder-front-end/package-lock.json ./holder/holder-front-end/package-lock.json
+
 COPY core-wallet ./core-wallet
 
 WORKDIR /build/holder
@@ -22,6 +28,9 @@ RUN go build .
 
 WORKDIR /build/holder/holder-front-end
 RUN npm install
+
+COPY holder/holder-front-end/src ./src
+COPY holder/holder-front-end/public ./public
 RUN npm run build
 
 
