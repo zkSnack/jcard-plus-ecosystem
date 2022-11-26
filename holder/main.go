@@ -215,7 +215,7 @@ func fetchClaimsFromIssuer(identity *walletSDK.Identity, config *walletSDK.Confi
 }
 
 func convertIden3CredClaimBodyToResponse(claims []walletSDK.Iden3CredentialClaimBody) []ClaimResponseBody {
-	var claimsResponse []ClaimResponseBody
+	claimsResponse := make([]ClaimResponseBody, 0)
 	for _, claim := range claims {
 		claimsResponse = append(claimsResponse, ClaimResponseBody{
 			ID:               claim.Iden3credential.ID,
