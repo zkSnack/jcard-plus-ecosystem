@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/gin-contrib/cors"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/iden3/go-iden3-auth/pubsignals"
 	core "github.com/iden3/go-iden3-core"
@@ -32,6 +32,10 @@ type ClaimResponseBody struct {
 	IssuerID         string                 `json:"issuerID"`
 	ClaimData        map[string]interface{} `json:"claimData"`
 	ClaimRawData     *core.Claim            `json:"claimRawData"`
+}
+
+type FetchClaimBody struct {
+	IssuerURL string `json:issuerURL`
 }
 
 type ProofRequest struct {
@@ -82,6 +86,7 @@ func main() {
 	router.POST("/api/v1/addClaim", addClaim(identity, config))
 	router.POST("/api/v1/requestProof", requestProof(identity, config))
 	router.POST("/api/v1/fetchClaimsFromIssuer", fetchClaimsFromIssuer(identity, config)) // Why this endpoint is POST?
+	router.POST("/api/v1/fetchClaimsByIssuer", fetchClaimsByIssuer(identity, config))
 	router.GET("/api/v1/getClaims", getClaims(identity, config))
 	router.GET("/api/v1/getAccount", getAccount(identity))
 	router.GET("/api/v1/getCurrentState", getCurrentState(config, identity))
@@ -212,6 +217,40 @@ func fetchClaimsFromIssuer(identity *walletSDK.Identity, config *walletSDK.Confi
 		}
 	}
 	return gin.HandlerFunc(fn)
+}
+
+func fetchClaimsByIssuer(identity *walletSDK.Identity, config *walletSDK.Config) gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		var body FetchClaimBody
+		c.BindJSON(&body)
+
+		initIssuerURL(body.IssuerURL, config)
+
+		claims, err := sendRequestToIssuerToGetClaims(identity, config)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+			return
+		}
+
+		err = identity.AddClaimsFromIssuer(claims)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+			return
+		}
+
+		err = walletSDK.DumpIdentity(identity)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+			return
+		}
+
+		c.IndentedJSON(http.StatusCreated, identity)
+	}
+	return gin.HandlerFunc(fn)
+}
+
+func initIssuerURL(url string, config *walletSDK.Config) {
+	config.Issuer.URL = "http://" + url
 }
 
 func convertIden3CredClaimBodyToResponse(claims []walletSDK.Iden3CredentialClaimBody) []ClaimResponseBody {
