@@ -85,7 +85,6 @@ func main() {
 
 	router.POST("/api/v1/addClaim", addClaim(identity, config))
 	router.POST("/api/v1/requestProof", requestProof(identity, config))
-	router.POST("/api/v1/fetchClaimsFromIssuer", fetchClaimsFromIssuer(identity, config)) // Why this endpoint is POST?
 	router.POST("/api/v1/fetchClaimsByIssuer", fetchClaimsByIssuer(identity, config))
 	router.GET("/api/v1/getClaims", getClaims(identity, config))
 	router.GET("/api/v1/getAccount", getAccount(identity))
@@ -196,35 +195,19 @@ func sendRequestToIssuerToGetClaims(identity *walletSDK.Identity, config *wallet
 	return claims, nil
 }
 
-func fetchClaimsFromIssuer(identity *walletSDK.Identity, config *walletSDK.Config) gin.HandlerFunc {
-	fn := func(c *gin.Context) {
-		claims, err := sendRequestToIssuerToGetClaims(identity, config)
-		if err != nil {
-			fmt.Println(err)
-			c.IndentedJSON(http.StatusCreated, err)
-			return
-		}
-		if err := identity.AddClaimsFromIssuer(claims); err != nil {
-			log.Printf("Error while adding issued claim to the wallet. Err %s\n", err)
-			c.IndentedJSON(http.StatusInternalServerError, "Failed to add issued claim to the wallet")
-		} else {
-			err = walletSDK.DumpIdentity(identity)
-			if err != nil {
-				c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to update account file")
-			} else {
-				c.IndentedJSON(http.StatusCreated, identity)
-			}
-		}
-	}
-	return gin.HandlerFunc(fn)
-}
-
 func fetchClaimsByIssuer(identity *walletSDK.Identity, config *walletSDK.Config) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		var body FetchClaimBody
 		c.BindJSON(&body)
 
-		initIssuerURL(body.IssuerURL, config)
+		if body.IssuerURL == "" {
+			c.IndentedJSON(http.StatusBadRequest, "Issuer URL is required")
+			return
+		}
+
+		// TODO: Add checks on the issuer URL to make sure it is a valid URL
+		// Initialize issuer config with the issuer URL
+		config.Issuer.URL = body.IssuerURL
 
 		claims, err := sendRequestToIssuerToGetClaims(identity, config)
 		if err != nil {
@@ -247,10 +230,6 @@ func fetchClaimsByIssuer(identity *walletSDK.Identity, config *walletSDK.Config)
 		c.IndentedJSON(http.StatusCreated, identity)
 	}
 	return gin.HandlerFunc(fn)
-}
-
-func initIssuerURL(url string, config *walletSDK.Config) {
-	config.Issuer.URL = "http://" + url
 }
 
 func convertIden3CredClaimBodyToResponse(claims []walletSDK.Iden3CredentialClaimBody) []ClaimResponseBody {
