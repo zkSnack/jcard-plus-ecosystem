@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/gin-contrib/cors"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/iden3/go-iden3-auth/pubsignals"
 	core "github.com/iden3/go-iden3-core"
@@ -32,6 +32,11 @@ type ClaimResponseBody struct {
 	IssuerID         string                 `json:"issuerID"`
 	ClaimData        map[string]interface{} `json:"claimData"`
 	ClaimRawData     *core.Claim            `json:"claimRawData"`
+}
+
+type FetchClaimBody struct {
+	IssuerURL string `json:issuerURL`
+	AuthToken string `json:authToken`
 }
 
 type ProofRequest struct {
@@ -81,7 +86,7 @@ func main() {
 
 	router.POST("/api/v1/addClaim", addClaim(identity, config))
 	router.POST("/api/v1/requestProof", requestProof(identity, config))
-	router.POST("/api/v1/fetchClaimsFromIssuer", fetchClaimsFromIssuer(identity, config)) // Why this endpoint is POST?
+	router.POST("/api/v1/fetchClaimsByIssuer", fetchClaimsByIssuer(identity))
 	router.GET("/api/v1/getClaims", getClaims(identity, config))
 	router.GET("/api/v1/getAccount", getAccount(identity))
 	router.GET("/api/v1/getCurrentState", getCurrentState(config, identity))
@@ -167,14 +172,14 @@ func requestProof(identity *walletSDK.Identity, config *walletSDK.Config) gin.Ha
 	return gin.HandlerFunc(fn)
 }
 
-func sendRequestToIssuerToGetClaims(identity *walletSDK.Identity, config *walletSDK.Config) ([]walletSDK.Iden3CredentialClaimBody, error) {
+func sendRequestToIssuerToGetClaims(identity *walletSDK.Identity, data FetchClaimBody) ([]walletSDK.Iden3CredentialClaimBody, error) {
 	postBody, _ := json.Marshal(map[string]string{
 		"id":    identity.ID.String(),
-		"token": config.Issuer.Token,
+		"token": data.AuthToken,
 	})
 	responseBody := bytes.NewBuffer(postBody)
 
-	resp, err := http.Post(config.Issuer.URL+"/api/v1/issueClaim", "application/json", responseBody)
+	resp, err := http.Post(data.IssuerURL+"/api/v1/issueClaim", "application/json", responseBody)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed while submitting claim to the issuer.")
 	}
@@ -191,25 +196,42 @@ func sendRequestToIssuerToGetClaims(identity *walletSDK.Identity, config *wallet
 	return claims, nil
 }
 
-func fetchClaimsFromIssuer(identity *walletSDK.Identity, config *walletSDK.Config) gin.HandlerFunc {
+// TO-DO: Remove configuation related to issuer from config.yaml file
+func fetchClaimsByIssuer(identity *walletSDK.Identity) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
-		claims, err := sendRequestToIssuerToGetClaims(identity, config)
-		if err != nil {
-			fmt.Println(err)
-			c.IndentedJSON(http.StatusCreated, err)
+		var body FetchClaimBody
+		c.BindJSON(&body)
+
+		// TODO: Add checks on the issuer URL to make sure it is a valid URL
+		if body.IssuerURL == "" {
+			c.IndentedJSON(http.StatusBadRequest, "Issuer URL is required")
 			return
 		}
-		if err := identity.AddClaimsFromIssuer(claims); err != nil {
-			log.Printf("Error while adding issued claim to the wallet. Err %s\n", err)
-			c.IndentedJSON(http.StatusInternalServerError, "Failed to add issued claim to the wallet")
-		} else {
-			err = walletSDK.DumpIdentity(identity)
-			if err != nil {
-				c.IndentedJSON(http.StatusInternalServerError, "Something went wrong! Failed to update account file")
-			} else {
-				c.IndentedJSON(http.StatusCreated, identity)
-			}
+
+		if body.AuthToken == "" {
+			c.IndentedJSON(http.StatusBadRequest, "Authorization token is required")
+			return
 		}
+
+		claims, err := sendRequestToIssuerToGetClaims(identity, body)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+			return
+		}
+
+		err = identity.AddClaimsFromIssuer(claims)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+			return
+		}
+
+		err = walletSDK.DumpIdentity(identity)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+			return
+		}
+
+		c.IndentedJSON(http.StatusCreated, identity)
 	}
 	return gin.HandlerFunc(fn)
 }
