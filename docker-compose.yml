@@ -20,9 +20,7 @@ services:
       - holder:/home/app
     entrypoint: "/home/app/holder"
     environment:
-      - ISSUER_URL=http://issuer.local:8090
       - PRIVATE_KEY=<PRIVATE_KEY>
-      - JHU_TOKEN=<JHU_TOKEN>
     networks:
       jcard:
         aliases:
@@ -44,7 +42,27 @@ services:
       jcard:
         aliases:
           - issuer.local
+  verifier:
+    build:
+      context: .
+      dockerfile: verifier/Dockerfile
+    container_name: verifier
+    image: verifier:latest
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - /dev/urandom:/dev/random
+      - verifier:/home/app
+    entrypoint: "/home/app/issuer"
+    environment:
+      - DOMAIN_NAME=http://localhost:9090
+    networks:
+      jcard:
+        aliases:
+          - verifier.local
 
 volumes:
   holder:
   issuer:
+  verifier:

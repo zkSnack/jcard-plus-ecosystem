@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -25,7 +26,9 @@ var idToQueryInfo map[string]pubsignals.Query
 var sessionIDToVerificationReqMap map[uint64]protocol.AuthorizationRequestMessage
 
 const VerifierID = "1125GJqgw6YEsKFwj63GY87MMxPL9kwDKxPUiwMLNZ"
-const VerifierHost = "https://a488-205-215-243-16.ngrok.io"
+
+var VerifierHost = "https://a488-205-215-243-16.ngrok.io"
+
 const CallbackURL = "/api/v1/callback"
 
 // Currently fixing the query directly in the code, will be changed to a dynamic query in the future
@@ -44,6 +47,7 @@ func Init() {
 			Type: "AgeCredential",
 		},
 	}
+	VerifierHost = os.Getenv("DOMAIN_NAME")
 }
 
 func main() {
@@ -65,7 +69,7 @@ func main() {
 	router.GET("/api/v1/requestVerificationQuery", requestVerificationQuery())
 	router.POST("/api/v1/callback", authenticateCallback())
 
-	router.Run("localhost:9090")
+	router.Run("0.0.0.0:9090")
 }
 
 func generateQR() gin.HandlerFunc {
