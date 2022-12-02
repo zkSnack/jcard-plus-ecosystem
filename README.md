@@ -149,6 +149,13 @@ $ cd holder
 $ go clean
 ```
 
+
+Or you can directly use our built docker image and run the wallet on your system:
+
+```
+$ docker run -d -p 8080:8080 --name holder zksnacks/jcard3-wallet:0.0.2
+```
+
 <!-- Use this space to show useful examples of how a project can be used. Additional screenshots, code examples and demos work well in this space. You may also link to more resources. -->
 
 <!-- _For more examples, please refer to the [Documentation](https://example.com)_ -->
