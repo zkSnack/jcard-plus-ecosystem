@@ -36,6 +36,7 @@ type ClaimResponseBody struct {
 
 type FetchClaimBody struct {
 	IssuerURL string `json:issuerURL`
+	AuthToken string `json:authToken`
 }
 
 type ProofRequest struct {
@@ -85,7 +86,7 @@ func main() {
 
 	router.POST("/api/v1/addClaim", addClaim(identity, config))
 	router.POST("/api/v1/requestProof", requestProof(identity, config))
-	router.POST("/api/v1/fetchClaimsByIssuer", fetchClaimsByIssuer(identity, config))
+	router.POST("/api/v1/fetchClaimsByIssuer", fetchClaimsByIssuer(identity))
 	router.GET("/api/v1/getClaims", getClaims(identity, config))
 	router.GET("/api/v1/getAccount", getAccount(identity))
 	router.GET("/api/v1/getCurrentState", getCurrentState(config, identity))
@@ -171,14 +172,14 @@ func requestProof(identity *walletSDK.Identity, config *walletSDK.Config) gin.Ha
 	return gin.HandlerFunc(fn)
 }
 
-func sendRequestToIssuerToGetClaims(identity *walletSDK.Identity, config *walletSDK.Config) ([]walletSDK.Iden3CredentialClaimBody, error) {
+func sendRequestToIssuerToGetClaims(identity *walletSDK.Identity, data FetchClaimBody) ([]walletSDK.Iden3CredentialClaimBody, error) {
 	postBody, _ := json.Marshal(map[string]string{
 		"id":    identity.ID.String(),
-		"token": config.Issuer.Token,
+		"token": data.AuthToken,
 	})
 	responseBody := bytes.NewBuffer(postBody)
 
-	resp, err := http.Post(config.Issuer.URL+"/api/v1/issueClaim", "application/json", responseBody)
+	resp, err := http.Post(data.IssuerURL+"/api/v1/issueClaim", "application/json", responseBody)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed while submitting claim to the issuer.")
 	}
@@ -195,21 +196,24 @@ func sendRequestToIssuerToGetClaims(identity *walletSDK.Identity, config *wallet
 	return claims, nil
 }
 
-func fetchClaimsByIssuer(identity *walletSDK.Identity, config *walletSDK.Config) gin.HandlerFunc {
+// TO-DO: Remove configuation related to issuer from config.yaml file
+func fetchClaimsByIssuer(identity *walletSDK.Identity) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		var body FetchClaimBody
 		c.BindJSON(&body)
 
+		// TODO: Add checks on the issuer URL to make sure it is a valid URL
 		if body.IssuerURL == "" {
 			c.IndentedJSON(http.StatusBadRequest, "Issuer URL is required")
 			return
 		}
 
-		// TODO: Add checks on the issuer URL to make sure it is a valid URL
-		// Initialize issuer config with the issuer URL
-		config.Issuer.URL = body.IssuerURL
+		if body.AuthToken == "" {
+			c.IndentedJSON(http.StatusBadRequest, "Authorization token is required")
+			return
+		}
 
-		claims, err := sendRequestToIssuerToGetClaims(identity, config)
+		claims, err := sendRequestToIssuerToGetClaims(identity, body)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 			return
