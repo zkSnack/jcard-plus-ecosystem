@@ -150,7 +150,7 @@ $ go clean
 ```
 
 
-Or you can directly use our built docker iamge and run the wallet on your system:
+Or you can directly use our built docker image and run the wallet on your system:
 
 ```
 $ docker run -d -p 8080:8080 --name holder zksnacks/jcard3-wallet:0.0.2
