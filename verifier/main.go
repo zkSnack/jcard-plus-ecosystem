@@ -27,7 +27,7 @@ var sessionIDToVerificationReqMap map[uint64]protocol.AuthorizationRequestMessag
 
 const VerifierID = "1125GJqgw6YEsKFwj63GY87MMxPL9kwDKxPUiwMLNZ"
 
-var VerifierHost = "https://a488-205-215-243-16.ngrok.io"
+var VerifierHost = "https://localhost:9090"
 
 const CallbackURL = "/api/v1/callback"
 
@@ -43,7 +43,7 @@ func Init() {
 			},
 		},
 		Schema: protocol.Schema{
-			URL:  "https://raw.githubusercontent.com/pratik1998/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld",
+			URL:  "https://raw.githubusercontent.com/zkSnack/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld",
 			Type: "AgeCredential",
 		},
 	}
@@ -245,7 +245,7 @@ func Authenticate() {
 				},
 			},
 			Schema: protocol.Schema{
-				URL:  "https://raw.githubusercontent.com/pratik1998/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld",
+				URL:  "https://raw.githubusercontent.com/zkSnack/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld",
 				Type: "AgeCredential",
 			},
 		},
@@ -260,7 +260,7 @@ func Authenticate() {
 func Verify(response protocol.AuthorizationResponseMessage, request protocol.AuthorizationRequestMessage) bool {
 
 	// Add Polygon RPC node endpoint - needed to read on-chain state
-	ethURL := "https://rpc-mumbai.matic.today"
+	ethURL := "https://rpc-mumbai.maticvigil.com/"
 
 	// Add identity state contract address
 	contractAddress := "0x87B36cE5393D4ea6EEf3eb7b1ca6aAd7ae295D4F"

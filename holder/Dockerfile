@@ -17,8 +17,8 @@ COPY holder/main.go ./holder/main.go
 COPY holder/config.yaml ./holder/config.yaml
 COPY holder/go.mod ./holder/go.mod
 COPY holder/go.sum ./holder/go.sum
-COPY holder/holder-front-end/package.json ./holder/holder-front-end/package.json
-COPY holder/holder-front-end/package-lock.json ./holder/holder-front-end/package-lock.json
+COPY holder/jcard-plus-frontend/package.json ./holder/jcard-plus-frontend/package.json
+COPY holder/jcard-plus-frontend/package-lock.json ./holder/jcard-plus-frontend/package-lock.json
 
 COPY core-wallet ./core-wallet
 
@@ -26,16 +26,16 @@ WORKDIR /build/holder
 RUN go mod tidy
 RUN go build .
 
-WORKDIR /build/holder/holder-front-end
+WORKDIR /build/holder/jcard-plus-frontend
 RUN npm install
 
-COPY holder/holder-front-end/src ./src
-COPY holder/holder-front-end/public ./public
+COPY holder/jcard-plus-frontend/src ./src
+COPY holder/jcard-plus-frontend/public ./public
 RUN npm run build
 
 
 RUN mv /build/holder/holder /home/app/holder
-RUN mv /build/holder/holder-front-end/build /home/app/holder-ui
+RUN mv /build/holder/jcard-plus-frontend/build /home/app/holder-ui
 
 COPY static/compiled-circuits /home/app/compiled-circuits
 COPY static/js /home/app/js

@@ -80,7 +80,7 @@ func generateAgeClaim(config *walletSDK.Config, holderID string, token string) (
 
 	claimAPI := walletSDK.ClaimAPI{
 		SubjectID:      holderID,
-		ClaimSchema:    "https://raw.githubusercontent.com/pratik1998/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld",
+		ClaimSchema:    "https://raw.githubusercontent.com/zkSnack/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld",
 		CredentialType: "AgeCredential",
 		IndexSlotA:     birthday,
 		ExpirationDate: time.Now().Unix() + 31536000,
@@ -108,7 +108,7 @@ func generateAgeClaimV2(config *walletSDK.Config, holderID string, token string)
 	iden3credentialAPI.ID = uuid.Must(uuid.NewV4()).String()
 	iden3credentialAPI.Context = []string{
 		"https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/iden3credential.json-ld",
-		"https://raw.githubusercontent.com/pratik1998/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld",
+		"https://raw.githubusercontent.com/zkSnack/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld",
 	}
 	iden3credentialAPI.Type = []string{
 		"Iden3Credential",
@@ -127,7 +127,7 @@ func generateAgeClaimV2(config *walletSDK.Config, holderID string, token string)
 		ID:   "http://localhost:8080/api/v1/claims/revocation/status/" + strconv.Itoa(int(iden3credentialAPI.RevNonce)),
 		Type: "SparseMerkleTreeProof", // Should be using constants but too lazy do work now
 	}
-	iden3credentialAPI.CredentialSchema.ID = "https://raw.githubusercontent.com/pratik1998/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld"
+	iden3credentialAPI.CredentialSchema.ID = "https://raw.githubusercontent.com/zkSnack/jcard-plus-schema-holder/master/claim-schemas/student-age.json-ld"
 	iden3credentialAPI.CredentialSchema.Type = "AgeCredential"
 
 	return &iden3credentialAPI, nil
