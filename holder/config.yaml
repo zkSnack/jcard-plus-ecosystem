@@ -9,10 +9,10 @@ circuits:
 
 web3:
   stateTransition: "0x87B36cE5393D4ea6EEf3eb7b1ca6aAd7ae295D4F"
-  url: "https://rpc-mumbai.matic.today"
+  url: "https://rpc-mumbai.maticvigil.com/"
   chainID: 80001
   privateKey: ${PRIVATE_KEY}
 
 ui:
-  staticDir: ${UI_STATIC_DIR:-./holder-front-end/build/static}
-  htmlDir: ${UI_HTML_DIR:-./holder-front-end/build/index.html}
+  staticDir: ${UI_STATIC_DIR:-./jcard-plus-frontend/build/static}
+  htmlDir: ${UI_HTML_DIR:-./jcard-plus-frontend/build/index.html}

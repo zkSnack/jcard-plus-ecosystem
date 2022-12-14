@@ -1,6 +1,6 @@
 [submodule "contracts"]
 	path = contracts
 	url = git@github.com:iden3/contracts.git
-[submodule "holder/holder-front-end"]
-	path = holder/holder-front-end
-	url = https://github.com/pratik1998/holder-front-end
+[submodule "holder/jcard-plus-frontend"]
+	path = holder/jcard-plus-frontend
+	url = git@github.com:zkSnack/jcard-plus-frontend.git
